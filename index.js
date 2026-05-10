@@ -1,11 +1,13 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
+const axios = require('axios'); // Kendi kendini dürtmek için gerekli
 const app = express();
 const port = process.env.PORT || 3000;
 
 let shutdownStatus = false;
-let sonDuyuru = ""; // Duyuruyu burada saklayacağız
+let sonDuyuru = ""; 
 
+// ROBLOX BURAYI SORGULAYACAK
 app.get('/kontrol', (req, res) => {
     res.json({ 
         shutdown: shutdownStatus,
@@ -13,31 +15,54 @@ app.get('/kontrol', (req, res) => {
     });
 });
 
-app.listen(port, () => { console.log("Bot ve Duyuru Sistemi Hazır."); });
+app.listen(port, () => { 
+    console.log(`Sunucu ${port} portunda ve Başmühendis emrinde!`); 
+});
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent
+    ]
+});
+
+client.on('ready', () => {
+    console.log(`${client.user.tag} aktif ve göreve hazır!`);
 });
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // KAPATMA KOMUTU
+    // SUNUCU KAPATMA KOMUTU
     if (message.content === '!kapat') {
         shutdownStatus = true;
-        message.reply('🚨 **EMİR ALINDI:** Sunucu kapatılıyor...');
-        setTimeout(() => { shutdownStatus = false; }, 30000);
+        message.reply('🚨 **BAŞMÜHENDİS TALİMATI:** Sunucu kapatılıyor...');
+        console.log("Kapatma sinyali gönderildi.");
+        
+        // 30 saniye sonra sistemi normale döndürür
+        setTimeout(() => { 
+            shutdownStatus = false; 
+            console.log("Sistem normale döndü.");
+        }, 30000);
     }
 
-    // DUYURU KOMUTU
+    // DUYURU SİSTEMİ
     if (message.content.startsWith('!duyuru ')) {
-        const mesaj = message.content.replace('!duyuru ', '');
-        sonDuyuru = mesaj; // İnternetteki ilan tahtasına mesajı yazdı
-        message.reply(`📢 **DUYURU YAYINLANDI:**\n> ${mesaj}`);
-
-        // Duyuruyu 1 dakika sonra sistemden siler (Ekranda sürekli kalmasın diye)
-        setTimeout(() => { sonDuyuru = ""; }, 60000);
+        sonDuyuru = message.content.replace('!duyuru ', '');
+        message.reply(`📢 **DUYURU YAYINLANDI:**\n> ${sonDuyuru}`);
+        
+        // Duyuruyu 45 saniye sonra sistemden siler (Ekranda kalıcı olmasın diye)
+        setTimeout(() => { sonDuyuru = ""; }, 45000);
     }
 });
+
+// --- KENDİ KENDİNİ UYANDIRMA SİSTEMİ (Anti-Sleep) ---
+// Render'ın botu uyutmaması için her 5 dakikada bir kendi linkine ping atar.
+setInterval(() => {
+    axios.get(`https://roblox-bot-servis.onrender.com/kontrol`)
+        .then(() => console.log("Kendi kendimi dürttüm, uyanığım!"))
+        .catch(() => console.log("Uyandırma servisi beklemede..."));
+}, 300000); // 5 dakika (300.000 ms)
 
 client.login(process.env.TOKEN);
