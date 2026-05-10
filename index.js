@@ -1,16 +1,14 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const express = require('express');
-const axios = require('axios');
 const app = express();
 const port = process.env.PORT || 3000;
 
 let shutdownStatus = false;
 let sonDuyuru = ""; 
-let sunucuVerisi = { oyuncuSayisi: 0, maxOyuncu: 0, serverUptime: "Bilinmiyor" };
+let sunucuVerisi = { oyuncuSayisi: 0, maxOyuncu: 0 };
 
-// ROBLOX BURAYA VERİ GÖNDERECEK VE ALACAK
+// ROBLOX VERİLERİ BURAYA GELECEK
 app.get('/kontrol', (req, res) => {
-    // Roblox veri gönderiyorsa onları kaydet
     if (req.query.players) sunucuVerisi.oyuncuSayisi = req.query.players;
     if (req.query.maxPlayers) sunucuVerisi.maxOyuncu = req.query.maxPlayers;
     
@@ -20,10 +18,16 @@ app.get('/kontrol', (req, res) => {
     });
 });
 
-app.listen(port, () => { console.log("Başmühendis Durum Sistemi Hazır."); });
+app.listen(port, () => { 
+    console.log("Başmühendis Sistemi Sorunsuz Başlatıldı."); 
+});
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMessages, 
+        GatewayIntentBits.MessageContent
+    ]
 });
 
 client.on('messageCreate', async (message) => {
@@ -33,12 +37,11 @@ client.on('messageCreate', async (message) => {
     if (message.content === '!durum') {
         const durumEmbed = new EmbedBuilder()
             .setTitle('🏗️ BAŞMÜHENDİS SAHA RAPORU')
-            .setColor(0xffa500) // Mühendis turuncusu
+            .setColor(0xffa500)
             .addFields(
                 { name: '👤 Aktif Oyuncu', value: `${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`, inline: true },
                 { name: '🌐 Sunucu Durumu', value: '🟢 Aktif', inline: true }
             )
-            .setFooter({ text: 'Sistem 7/24 takipte.' })
             .setTimestamp();
 
         message.reply({ embeds: [durumEmbed] });
@@ -47,7 +50,7 @@ client.on('messageCreate', async (message) => {
     // DUYURU KOMUTU
     if (message.content.startsWith('!duyuru ')) {
         sonDuyuru = message.content.replace('!duyuru ', '');
-        message.reply(`📢 **DUYURU:** ${sonDuyuru}`);
+        message.reply(`📢 **Duyuru Yayınlandı:** ${sonDuyuru}`);
         setTimeout(() => { sonDuyuru = ""; }, 45000);
     }
 
@@ -55,13 +58,8 @@ client.on('messageCreate', async (message) => {
     if (message.content === '!kapat') {
         shutdownStatus = true;
         message.reply('🚨 Sunucu kapatılıyor...');
-        setTimeout(() => { shutdownStatus = false; }, 30000);
+        setTimeout(() => { shutdownStatus = false; }, 20000);
     }
 });
-
-// Anti-Sleep
-setInterval(() => {
-    axios.get(`https://roblox-bot-servis.onrender.com/kontrol`).catch(() => {});
-}, 300000);
 
 client.login(process.env.TOKEN);
