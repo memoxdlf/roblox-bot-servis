@@ -3,78 +3,56 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// VERİ DEPOSU
-let veriHavuzu = {
-    flash: "",
-    duyuru: "",
-    saat: "",
-    ozelHedef: "",
-    ozelMesaj: "",
-    oyuncuSayisi: 0, // !durum için
-    maxOyuncu: 0     // !durum için
-};
+// SİSTEMİN KALBİ (Veri Havuzu)
+let havuz = { flash: "", duyuru: "", saat: "", hedef: "", mesaj: "", p: 0, m: 0 };
 
 app.use(express.json());
 
-// ROBLOX BURADAN VERİ ALIR VE OYUNCU SAYISINI GÖNDERİR
+// ROBLOX BURADAN VERİ ALIR VE GÖNDERİR
 app.get('/kontrol', (req, res) => {
-    // Roblox'tan gelen oyuncu sayılarını kaydet
-    if (req.query.p) veriHavuzu.oyuncuSayisi = req.query.p;
-    if (req.query.m) veriHavuzu.maxOyuncu = req.query.m;
-
-    res.json(veriHavuzu);
-    
-    // Tek seferlikleri sıfırla
-    veriHavuzu.flash = "";
-    veriHavuzu.saat = "";
-    veriHavuzu.ozelHedef = "";
-    veriHavuzu.ozelMesaj = "";
+    if (req.query.p) havuz.p = req.query.p;
+    if (req.query.m) havuz.m = req.query.m;
+    res.json(havuz);
+    // Tek seferlikleri gönderince sıfırla
+    havuz.flash = ""; havuz.saat = ""; havuz.hedef = ""; havuz.mesaj = "";
 });
 
-// LOG SİSTEMİ (Aynen Kalıyor)
+// LOG SİSTEMİ (GİRİŞ-ÇIKIŞ)
 app.post('/log', (req, res) => {
     const { tip, oyuncu } = req.body;
-    const kanal = client.channels.cache.get("LOG_KANAL_ID_BURAYA");
+    const kanal = client.channels.cache.get("LOG_KANAL_ID_BURAYA"); // BURAYA ID YAZ
     if (kanal) {
         const embed = new EmbedBuilder()
             .setTitle(tip === "GIRIS" ? "📥 Giriş" : "📤 Çıkış")
-            .setDescription(`**${oyuncu}** sunucuya ${tip === "GIRIS" ? "girdi" : "çıktı"}.`)
+            .setDescription(`**${oyuncu}** sunucuya ${tip === "GIRIS" ? "bağlandı" : "veda etti"}.`)
             .setColor(tip === "GIRIS" ? 0x00FF00 : 0xFF0000);
         kanal.send({ embeds: [embed] });
     }
     res.sendStatus(200);
 });
 
-const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
-});
+const client = new Client({ intents: [1, 512, 32768] }); // Temel yetkiler
 
-client.on('messageCreate', async (m) => {
-    if (m.author.bot || !m.content.startsWith('!')) return;
-    const args = m.content.slice(1).trim().split(/ +/);
-    const komut = args.shift().toLowerCase();
+client.on('messageCreate', async (msg) => {
+    if (msg.author.bot || !msg.content.startsWith('!')) return;
+    const args = msg.content.slice(1).trim().split(/ +/);
+    const cmd = args.shift().toLowerCase();
 
-    // !durum KOMUTU (TAMİR EDİLDİ)
-    if (komut === 'durum') {
+    if (cmd === 'flash') { havuz.flash = args.join(' '); msg.reply("🔥 Flash gitti."); }
+    else if (cmd === 'duyuru') { havuz.duyuru = args.join(' '); msg.reply("📢 Duyuru güncellendi."); }
+    else if (cmd === 'saat') { havuz.saat = args[0]; msg.reply("⏰ Saat ayarlandı."); }
+    else if (cmd === 'durum') {
         const embed = new EmbedBuilder()
-            .setTitle("📊 Sunucu Durumu")
-            .addFields(
-                { name: "👤 Oyuncu Sayısı", value: `${veriHavuzu.oyuncuSayisi} / ${veriHavuzu.maxOyuncu}`, inline: true },
-                { name: "📢 Son Duyuru", value: veriHavuzu.duyuru || "Yok", inline: false }
-            )
-            .setColor(0x3498db);
-        m.reply({ embeds: [embed] });
+            .setTitle("📊 Sunucu")
+            .setDescription(`Oyuncu: ${havuz.p}/${havuz.m}\nDuyuru: ${havuz.duyuru || "Yok"}`)
+            .setColor(0x00AEFF);
+        msg.reply({ embeds: [embed] });
     }
-    
-    // DİĞER KOMUTLAR (!flash, !duyuru, !saat, !mesaj)
-    if (komut === 'flash') veriHavuzu.flash = args.join(' ');
-    if (komut === 'duyuru') veriHavuzu.duyuru = args.join(' ');
-    if (komut === 'saat') veriHavuzu.saat = args[0];
-    if (komut === 'mesaj') {
-        veriHavuzu.ozelHedef = args[0];
-        veriHavuzu.ozelMesaj = args.slice(1).join(' ');
+    else if (cmd === 'mesaj') {
+        havuz.hedef = args[0]; havuz.mesaj = args.slice(1).join(' ');
+        msg.reply(`✉️ ${args[0]} için mesaj sıraya alındı.`);
     }
 });
 
-app.listen(port, () => console.log("Sistem Aktif"));
+app.listen(port);
 client.login(process.env.TOKEN);
