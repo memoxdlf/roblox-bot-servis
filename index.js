@@ -5,56 +5,56 @@ const port = process.env.PORT || 3000;
 
 let shutdownStatus = false;
 let sonDuyuru = ""; 
+let flashMesaj = ""; // Yeni: Ekran ortası mesajı
 let sunucuVerisi = { oyuncuSayisi: 0, maxOyuncu: 0 };
 
-// ROBLOX VERİLERİ BURAYA GELECEK
 app.get('/kontrol', (req, res) => {
     if (req.query.players) sunucuVerisi.oyuncuSayisi = req.query.players;
     if (req.query.maxPlayers) sunucuVerisi.maxOyuncu = req.query.maxPlayers;
     
     res.json({ 
         shutdown: shutdownStatus,
-        duyuru: sonDuyuru 
+        duyuru: sonDuyuru,
+        flash: flashMesaj // Roblox bunu okuyacak
     });
 });
 
-app.listen(port, () => { 
-    console.log("Başmühendis Sistemi Sorunsuz Başlatıldı."); 
-});
+app.listen(port, () => { console.log("Başmühendis Flash Sistemi Hazır."); });
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent
-    ]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // DURUM KOMUTU
+    // FLASH KOMUTU (!flash MESAJ)
+    if (message.content.startsWith('!flash ')) {
+        flashMesaj = message.content.replace('!flash ', '');
+        message.reply(`🔥 **ACİL DURUM MESAJI GÖNDERİLDİ:**\n> ${flashMesaj}`);
+        
+        // 10 saniye sonra sistemden temizle (ekranda takılı kalmasın)
+        setTimeout(() => { flashMesaj = ""; }, 10000);
+    }
+
+    // DİĞER KOMUTLAR (Durum, Duyuru, Kapat)
     if (message.content === '!durum') {
-        const durumEmbed = new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setTitle('🏗️ BAŞMÜHENDİS SAHA RAPORU')
             .setColor(0xffa500)
             .addFields(
-                { name: '👤 Aktif Oyuncu', value: `${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`, inline: true },
-                { name: '🌐 Sunucu Durumu', value: '🟢 Aktif', inline: true }
-            )
-            .setTimestamp();
-
-        message.reply({ embeds: [durumEmbed] });
+                { name: '👤 Oyuncu', value: `${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`, inline: true },
+                { name: '🌐 Durum', value: '🟢 Aktif', inline: true }
+            );
+        message.reply({ embeds: [embed] });
     }
 
-    // DUYURU KOMUTU
     if (message.content.startsWith('!duyuru ')) {
         sonDuyuru = message.content.replace('!duyuru ', '');
-        message.reply(`📢 **Duyuru Yayınlandı:** ${sonDuyuru}`);
-        setTimeout(() => { sonDuyuru = ""; }, 45000);
+        message.reply(`📢 Duyuru yayınlandı!`);
+        setTimeout(() => { sonDuyuru = ""; }, 30000);
     }
 
-    // KAPATMA KOMUTU
     if (message.content === '!kapat') {
         shutdownStatus = true;
         message.reply('🚨 Sunucu kapatılıyor...');
