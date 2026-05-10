@@ -1,55 +1,49 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, WebhookClient } = require('discord.js');
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
 let flashMesaj = ""; 
 let sunucuSaati = ""; 
-let ozelMesaj = { hedef: "", icerik: "" }; // Yeni: Kişiye özel mesaj
+let ozelMesaj = { hedef: "", icerik: "" };
 let sunucuVerisi = { oyuncuSayisi: 0, maxOyuncu: 0 };
 
+app.use(express.json()); // Gelen verileri okumak için
+
+// ROBLOX BURADAN VERİ ALIR VE VERİ GÖNDERİR
 app.get('/kontrol', (req, res) => {
-    res.json({ 
-        flash: flashMesaj,
-        saat: sunucuSaati,
-        ozel: ozelMesaj // Roblox bunu kontrol edecek
-    });
-    // Mesaj iletildikten sonra temizle ki ekranda takılı kalmasın
+    res.json({ flash: flashMesaj, saat: sunucuSaati, ozel: ozelMesaj });
     ozelMesaj = { hedef: "", icerik: "" };
     sunucuSaati = "";
 });
 
-app.listen(port, () => { console.log("Yönetim Paneli Güncellendi."); });
+// ROBLOX LOG GÖNDERDİĞİNDE BURASI ÇALIŞIR
+app.post('/log', (req, res) => {
+    const { tip, oyuncu } = req.body;
+    const kanal = client.channels.cache.get("1503137569876218121"); // Kanal ID'ni buraya yaz!
+
+    if (kanal) {
+        const embed = new EmbedBuilder()
+            .setTitle(tip === "GIRIS" ? "📥 Sunucuya Katılım" : "📤 Sunucudan Ayrılma")
+            .setDescription(`**${oyuncu}** isimli oyuncu sunucuya ${tip === "GIRIS" ? "bağlandı" : "veda etti"}.`)
+            .setColor(tip === "GIRIS" ? 0x00ff00 : 0xff0000)
+            .setTimestamp();
+        
+        kanal.send({ embeds: [embed] });
+    }
+    res.sendStatus(200);
+});
+
+app.listen(port, () => { console.log("Yönetim ve Log Sistemi Aktif."); });
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
+// (Eski komutların !flash, !mesaj, !durum vb. burada aynen kalabilir...)
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-
-    // !mesaj [OyuncuAdı] [Mesaj]
-    if (message.content.startsWith('!mesaj ')) {
-        const args = message.content.split(' ');
-        if (args.length < 3) return message.reply("⚠️ **Hata:** Kullanım: `!mesaj OyuncuAdi Mesajiniz` şeklinde olmalı.");
-        
-        const hedefOyuncu = args[1];
-        const icerik = args.slice(2).join(' ');
-
-        ozelMesaj = { hedef: hedefOyuncu, icerik: icerik };
-        message.reply(`✉️ **${hedefOyuncu}** isimli oyuncuya özel mesaj gönderildi: \n> ${icerik}`);
-    }
-
-    // !durum, !flash ve !saat komutların aynı kalıyor...
-    if (message.content === '!durum') {
-        message.reply(`👤 Oyuncu: ${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`);
-    }
-
-    if (message.content.startsWith('!flash ')) {
-        flashMesaj = message.content.replace('!flash ', '').trim();
-        message.reply(`⚡ Flash gönderildi.`);
-        setTimeout(() => { flashMesaj = ""; }, 10000);
-    }
+    // ... eski komut kodlarını buraya ekle ...
 });
 
 client.login(process.env.TOKEN);
