@@ -5,21 +5,16 @@ const port = process.env.PORT || 3000;
 
 let shutdownStatus = false;
 let sonDuyuru = ""; 
-let flashMesaj = ""; // Yeni: Ekran ortası mesajı
+let flashMesaj = ""; 
 let sunucuVerisi = { oyuncuSayisi: 0, maxOyuncu: 0 };
 
 app.get('/kontrol', (req, res) => {
     if (req.query.players) sunucuVerisi.oyuncuSayisi = req.query.players;
     if (req.query.maxPlayers) sunucuVerisi.maxOyuncu = req.query.maxPlayers;
-    
-    res.json({ 
-        shutdown: shutdownStatus,
-        duyuru: sonDuyuru,
-        flash: flashMesaj // Roblox bunu okuyacak
-    });
+    res.json({ shutdown: shutdownStatus, duyuru: sonDuyuru, flash: flashMesaj });
 });
 
-app.listen(port, () => { console.log("Başmühendis Flash Sistemi Hazır."); });
+app.listen(port, () => { console.log("Başmühendis Sistemi Aktif."); });
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
@@ -28,16 +23,29 @@ const client = new Client({
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // FLASH KOMUTU (!flash MESAJ)
-    if (message.content.startsWith('!flash ')) {
-        flashMesaj = message.content.replace('!flash ', '');
-        message.reply(`🔥 **ACİL DURUM MESAJI GÖNDERİLDİ:**\n> ${flashMesaj}`);
-        
-        // 10 saniye sonra sistemden temizle (ekranda takılı kalmasın)
+    // FLASH KOMUTU KONTROLÜ
+    if (message.content.startsWith('!flash')) {
+        const icerik = message.content.replace('!flash', '').trim();
+
+        // EĞER MESAJ BOŞSA
+        if (!icerik) {
+            return message.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle('⚠️ Hatalı Kullanım')
+                        .setDescription('**Başmühendis Talimatı:** Lütfen gönderilecek mesajı yazın!\n\n**Örnek:** `!flash Sunucu bakıma giriyor.`')
+                        .setColor(0xff0000) // Kırmızı uyarı
+                ]
+            });
+        }
+
+        // MESAJ DOLUYSA GÖNDER
+        flashMesaj = icerik;
+        message.reply(`🔥 **ACİL DURUM MESAJI YAYINLANDI:**\n> ${flashMesaj}`);
         setTimeout(() => { flashMesaj = ""; }, 10000);
     }
 
-    // DİĞER KOMUTLAR (Durum, Duyuru, Kapat)
+    // !durum KOMUTU
     if (message.content === '!durum') {
         const embed = new EmbedBuilder()
             .setTitle('🏗️ BAŞMÜHENDİS SAHA RAPORU')
@@ -47,18 +55,6 @@ client.on('messageCreate', async (message) => {
                 { name: '🌐 Durum', value: '🟢 Aktif', inline: true }
             );
         message.reply({ embeds: [embed] });
-    }
-
-    if (message.content.startsWith('!duyuru ')) {
-        sonDuyuru = message.content.replace('!duyuru ', '');
-        message.reply(`📢 Duyuru yayınlandı!`);
-        setTimeout(() => { sonDuyuru = ""; }, 30000);
-    }
-
-    if (message.content === '!kapat') {
-        shutdownStatus = true;
-        message.reply('🚨 Sunucu kapatılıyor...');
-        setTimeout(() => { shutdownStatus = false; }, 20000);
     }
 });
 
