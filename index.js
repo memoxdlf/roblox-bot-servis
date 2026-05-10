@@ -1,55 +1,49 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 const express = require('express');
 const app = express();
-const port = process.env.PORT || 3000;
 
-let flashMesaj = ""; 
-let sunucuSaati = ""; 
-let ozelMesaj = { hedef: "", icerik: "" }; // Yeni: Kişiye özel mesaj
-let sunucuVerisi = { oyuncuSayisi: 0, maxOyuncu: 0 };
+// Verileri başlangıçta tanımlıyoruz (undefined hatasını önler)
+let veri = { flash: "", duyuru: "Henüz duyuru yok.", hedef: "", mesaj: "" };
+
+app.use(express.json());
 
 app.get('/kontrol', (req, res) => {
-    res.json({ 
-        flash: flashMesaj,
-        saat: sunucuSaati,
-        ozel: ozelMesaj // Roblox bunu kontrol edecek
-    });
-    // Mesaj iletildikten sonra temizle ki ekranda takılı kalmasın
-    ozelMesaj = { hedef: "", icerik: "" };
-    sunucuSaati = "";
-});
-
-app.listen(port, () => { console.log("Yönetim Paneli Güncellendi."); });
-
-const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
-});
-
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-
-    // !mesaj [OyuncuAdı] [Mesaj]
-    if (message.content.startsWith('!mesaj ')) {
-        const args = message.content.split(' ');
-        if (args.length < 3) return message.reply("⚠️ **Hata:** Kullanım: `!mesaj OyuncuAdi Mesajiniz` şeklinde olmalı.");
-        
-        const hedefOyuncu = args[1];
-        const icerik = args.slice(2).join(' ');
-
-        ozelMesaj = { hedef: hedefOyuncu, icerik: icerik };
-        message.reply(`✉️ **${hedefOyuncu}** isimli oyuncuya özel mesaj gönderildi: \n> ${icerik}`);
-    }
-
-    // !durum, !flash ve !saat komutların aynı kalıyor...
-    if (message.content === '!durum') {
-        message.reply(`👤 Oyuncu: ${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`);
-    }
-
-    if (message.content.startsWith('!flash ')) {
-        flashMesaj = message.content.replace('!flash ', '').trim();
-        message.reply(`⚡ Flash gönderildi.`);
-        setTimeout(() => { flashMesaj = ""; }, 10000);
+    try {
+        res.json(veri);
+        // Gönderilen geçici verileri temizle ama duyuruyu tut
+        veri.flash = ""; 
+        veri.hedef = ""; 
+        veri.mesaj = "";
+    } catch (err) {
+        console.error("Veri gönderme hatası:", err);
+        res.status(500).send("Hata");
     }
 });
 
+const client = new Client({ intents: [32768, 512, 1] });
+
+client.on('messageCreate', async (m) => {
+    if (m.author.bot || !m.content.startsWith('!')) return;
+    const args = m.content.slice(1).trim().split(/ +/);
+    const cmd = args.shift().toLowerCase();
+
+    try {
+        if (cmd === 'flash') {
+            veri.flash = args.join(' ');
+            m.reply("⚡ Flash iletildi.");
+        } else if (cmd === 'duyuru') {
+            veri.duyuru = args.join(' ');
+            m.reply("📢 Duyuru güncellendi.");
+        } else if (cmd === 'mesaj') {
+            if (args.length < 2) return m.reply("⚠️ Kullanım: !mesaj isim mesaj");
+            veri.hedef = args[0];
+            veri.mesaj = args.slice(1).join(' ');
+            m.reply(`✉️ **${args[0]}** için mesaj sıraya alındı.`);
+        }
+    } catch (e) {
+        console.log("Komut işleme hatası:", e);
+    }
+});
+
+app.listen(process.env.PORT || 3000, () => console.log("Bot Zırhlı Modda Aktif."));
 client.login(process.env.TOKEN);
