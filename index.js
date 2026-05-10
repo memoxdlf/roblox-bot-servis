@@ -3,32 +3,23 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// SISTEM HAFIZASI
 let havuz = { duyuru: "", hedef: "", mesaj: "", p: 0, m: 0 };
 
 app.use(express.json());
 
-// ROBLOX VERI CEKME NOKTASI
 app.get('/kontrol', (req, res) => {
-    // Oyuncu sayılarını güncelle
     if (req.query.p) havuz.p = req.query.p;
     if (req.query.m) havuz.m = req.query.m;
-    
-    // Veriyi Roblox'a gönder
     res.json(havuz);
     
-    // KRITIK: Veriyi gönderdikten sonra havuzu temizle ki Roblox sürekli aynı şeyi okumasın
+    // Verileri gönderdikten sonra sıfırla (Sonsuz döngü koruması)
     havuz.duyuru = ""; 
     havuz.hedef = "";
     havuz.mesaj = "";
 });
 
 const client = new Client({ 
-    intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent
-    ] 
+    intents: [32768, 512, 1] 
 });
 
 client.on('messageCreate', async (m) => {
@@ -37,33 +28,35 @@ client.on('messageCreate', async (m) => {
     const cmd = args.shift().toLowerCase();
 
     try {
-        if (cmd === 'duyuru' || cmd === 'flash') {
+        // SADECE DUYURU
+        if (cmd === 'duyuru') {
             const msg = args.join(' ');
-            if (!msg) return m.reply("⚠️ Mesaj yazmalısın!");
+            if (!msg) return m.reply("⚠️ Bir duyuru metni yazın!");
             havuz.duyuru = msg;
-            m.reply(`📢 **Duyuru Gönderildi:** ${msg}`);
+            m.reply(`📢 **Duyuru İletildi:** ${msg}`);
         } 
+        // SUNUCU KAPATMA
         else if (cmd === 'shutdown') {
             havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
-            m.reply("🛑 **SHUTDOWN:** Sunucu kapatma emri iletildi!");
+            m.reply("🛑 **SHUTDOWN:** Sunucu kapatma emri gönderildi.");
         }
+        // ÖZEL MESAJ
         else if (cmd === 'mesaj') {
             if (args.length < 2) return m.reply("⚠️ Kullanım: `!mesaj [İsim] [Mesaj]`");
             havuz.hedef = args[0];
             havuz.mesaj = args.slice(1).join(' ');
-            m.reply(`✉️ **${havuz.hedef}** için özel mesaj gönderildi.`);
+            m.reply(`✉️ **${havuz.hedef}** için özel mesaj iletildi.`);
         }
+        // DURUM
         else if (cmd === 'durum') {
             const embed = new EmbedBuilder()
-                .setTitle("📊 Sunucu Durumu")
-                .addFields(
-                    { name: "👤 Oyuncu", value: `${havuz.p} / ${havuz.m}`, inline: true }
-                )
-                .setColor(0x00FF00);
+                .setTitle("📊 Sunucu Bilgisi")
+                .setDescription(`👤 **Oyuncu:** ${havuz.p} / ${havuz.m}`)
+                .setColor(0x3498db);
             m.reply({ embeds: [embed] });
         }
-    } catch (e) { console.log(e); }
+    } catch (e) { console.log("Hata:", e); }
 });
 
-app.listen(port, () => console.log("Render Sunucusu Aktif."));
+app.listen(port, () => console.log("Bot Hazır."));
 client.login(process.env.TOKEN);
