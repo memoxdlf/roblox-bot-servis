@@ -3,30 +3,18 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// SISTEM HAFIZASI
-let havuz = { 
-    duyuru: "", 
-    hedef: "", 
-    mesaj: "", 
-    kickHedef: "", 
-    p: 0, 
-    m: 0,
-    aktifOyuncular: [] 
-};
+let havuz = { duyuru: "", hedef: "", mesaj: "", kickHedef: "", p: 0, m: 0, aktifOyuncular: [] };
 
 app.use(express.json());
 
-// ROBLOX VERI CEKME NOKTASI
 app.get('/kontrol', (req, res) => {
     if (req.query.p) havuz.p = req.query.p;
     if (req.query.m) havuz.m = req.query.m;
-    if (req.query.users) {
-        havuz.aktifOyuncular = req.query.users.split(",");
-    }
+    if (req.query.users) havuz.aktifOyuncular = req.query.users.split(",");
 
     res.json(havuz);
     
-    // Verileri ilettikten sonra temizle
+    // Verileri gönderdikten sonra anında sıfırla
     havuz.duyuru = ""; 
     havuz.hedef = "";
     havuz.mesaj = "";
@@ -34,11 +22,7 @@ app.get('/kontrol', (req, res) => {
 });
 
 const client = new Client({ 
-    intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent
-    ] 
+    intents: [32768, 512, 1] 
 });
 
 client.on('messageCreate', async (m) => {
@@ -47,60 +31,57 @@ client.on('messageCreate', async (m) => {
     const cmd = args.shift().toLowerCase();
 
     try {
-        // 1. KICK KOMUTU (OYUNCU KONTROLLÜ)
-        if (cmd === 'kick') {
-            const hedefIsim = args[0];
-            if (!hedefIsim) {
-                return m.reply("⚠️ **Hata:** Atılacak oyuncunun adını yazmalısın!\nDoğrusu: `!kick [OyuncuAdı]`");
-            }
-
-            const oyundaMi = havuz.aktifOyuncular.some(name => name.toLowerCase() === hedefIsim.toLowerCase());
+        // YENİ: !YARDIM KOMUTU
+        if (cmd === 'yardım' || cmd === 'help') {
+            const yardimEmbed = new EmbedBuilder()
+                .setTitle("🛠️ Sistem Kullanım Kılavuzu")
+                .setDescription("Aşağıdaki komutları kullanarak sunucuyu yönetebilirsiniz:")
+                .addFields(
+                    { name: "📢 !duyuru [Mesaj]", value: "Ekrana 5 saniyelik duyuru atar.", inline: false },
+                    { name: "👞 !kick [İsim]", value: "Oyuncuyu sunucudan atar.", inline: true },
+                    { name: "🛑 !shutdown", value: "Sunucuyu kapatır.", inline: true },
+                    { name: "✉️ !mesaj [İsim] [Mesaj]", value: "Kişiye özel bildirim gönderir.", inline: false },
+                    { name: "📊 !durum", value: "Oyuncu listesini ve sayısını gösterir.", inline: true }
+                )
+                .setColor(0xFFA500)
+                .setFooter({ text: "Sistem Başmühendisi" });
             
-            if (!oyundaMi) {
-                return m.reply(`❌ **Hata:** "${hedefIsim}" adlı oyuncu şu an oyunda aktif değil.`);
-            }
-
-            havuz.kickHedef = hedefIsim;
-            m.reply(`👞 **${hedefIsim}** bulundu ve sunucudan atılıyor!`);
+            return m.reply({ embeds: [yardimEmbed] });
         }
 
-        // 2. DUYURU KOMUTU
+        // KICK KOMUTU
+        if (cmd === 'kick') {
+            const hedef = args[0];
+            if (!hedef) return m.reply("⚠️ Doğru kullanım: `!kick [OyuncuAdı]`");
+            
+            const oyundaMi = havuz.aktifOyuncular.some(name => name.toLowerCase() === hedef.toLowerCase());
+            if (!oyundaMi) return m.reply(`❌ **${hedef}** şu an oyunda değil.`);
+
+            havuz.kickHedef = hedef;
+            m.reply(`👞 **${hedef}** sunucudan atılıyor!`);
+        }
+
+        // DUYURU KOMUTU
         else if (cmd === 'duyuru') {
             const msg = args.join(' ');
-            if (!msg) return m.reply("⚠️ **Hata:** Duyuru metni yazmalısın!\nDoğrusu: `!duyuru [Mesaj]`");
+            if (!msg) return m.reply("⚠️ Doğru kullanım: `!duyuru [Mesaj]`");
             havuz.duyuru = msg;
-            m.reply(`📢 **Duyuru İletildi:** ${msg}`);
+            m.reply(`📢 Duyuru iletildi: **${msg}**`);
         }
 
-        // 3. SHUTDOWN KOMUTU
+        // SHUTDOWN
         else if (cmd === 'shutdown') {
             havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
-            m.reply("🛑 **SHUTDOWN:** Sunucu kapatma emri verildi.");
+            m.reply("🛑 Sunucu kapatma emri verildi.");
         }
 
-        // 4. OZEL MESAJ KOMUTU
-        else if (cmd === 'mesaj') {
-            if (!args[0] || !args[1]) {
-                return m.reply("⚠️ **Hata:** Eksik bilgi!\nDoğrusu: `!mesaj [OyuncuAdı] [Mesaj]`");
-            }
-            havuz.hedef = args[0];
-            havuz.mesaj = args.slice(1).join(' ');
-            m.reply(`✉️ **${havuz.hedef}** oyuncusuna özel mesaj iletildi.`);
-        }
-
-        // 5. DURUM KOMUTU
+        // DURUM
         else if (cmd === 'durum') {
-            const embed = new EmbedBuilder()
-                .setTitle("📊 Sunucu Durumu")
-                .addFields(
-                    { name: "👤 Oyuncu", value: `${havuz.p} / ${havuz.m}`, inline: true },
-                    { name: "👥 Aktifler", value: `\`${havuz.aktifOyuncular.join(", ") || "Kimse yok"}\`` }
-                )
-                .setColor(0x3498db);
-            m.reply({ embeds: [embed] });
+            m.reply(`📊 **Durum:** ${havuz.p}/${havuz.m}\n👥 **Aktifler:** \`${havuz.aktifOyuncular.join(", ") || "Kimse yok"}\``);
         }
-    } catch (e) { console.log(e); }
+        
+    } catch (e) { console.log("Hata oluştu:", e); }
 });
 
-app.listen(port, () => console.log("Sistem Hazır."));
+app.listen(port, () => console.log("Bot Hazır."));
 client.login(process.env.TOKEN);
