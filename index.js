@@ -4,42 +4,39 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 let shutdownStatus = false;
+let sonDuyuru = ""; // Duyuruyu burada saklayacağız
 
-// Roblox'un sorgu yaptığı kapı
 app.get('/kontrol', (req, res) => {
-    // Roblox bu JSON objesini (shutdown: true/false) okuyacak
-    res.json({ shutdown: shutdownStatus });
+    res.json({ 
+        shutdown: shutdownStatus,
+        duyuru: sonDuyuru 
+    });
 });
 
-app.listen(port, () => {
-    console.log(`Sunucu ${port} portunda hazır.`);
-});
+app.listen(port, () => { console.log("Bot ve Duyuru Sistemi Hazır."); });
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
-});
-
-client.on('ready', () => {
-    console.log(`${client.user.tag} olarak giriş yapıldı!`);
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
 client.on('messageCreate', async (message) => {
-    // Komut kontrolü
-    if (message.content === '!kapat') {
-        shutdownStatus = true; // Sinyali TRUE yap
-        message.reply('🚨 **EMİR ONAYLANDI:** Sunucu kapatılıyor! (30 saniye sonra sistem otomatik sıfırlanacaktır)');
-        
-        console.log("Kapatma emri verildi, sinyal TRUE yapıldı.");
+    if (message.author.bot) return;
 
-        // 30 saniye boyunca TRUE kalsın ki Roblox mutlaka yakalasın
-        setTimeout(() => {
-            shutdownStatus = false;
-            console.log("Sistem otomatik olarak normale döndü (FALSE).");
-        }, 30000); 
+    // KAPATMA KOMUTU
+    if (message.content === '!kapat') {
+        shutdownStatus = true;
+        message.reply('🚨 **EMİR ALINDI:** Sunucu kapatılıyor...');
+        setTimeout(() => { shutdownStatus = false; }, 30000);
+    }
+
+    // DUYURU KOMUTU
+    if (message.content.startsWith('!duyuru ')) {
+        const mesaj = message.content.replace('!duyuru ', '');
+        sonDuyuru = mesaj; // İnternetteki ilan tahtasına mesajı yazdı
+        message.reply(`📢 **DUYURU YAYINLANDI:**\n> ${mesaj}`);
+
+        // Duyuruyu 1 dakika sonra sistemden siler (Ekranda sürekli kalmasın diye)
+        setTimeout(() => { sonDuyuru = ""; }, 60000);
     }
 });
 
