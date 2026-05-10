@@ -1,23 +1,21 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const express = require('express');
 const app = express();
 
-// Verileri başlangıçta tanımlıyoruz (undefined hatasını önler)
-let veri = { flash: "", duyuru: "Henüz duyuru yok.", hedef: "", mesaj: "" };
+// Sistem hafızası
+let havuz = { duyuru: "", hedef: "", mesaj: "", p: 0, m: 0 };
 
 app.use(express.json());
 
+// Roblox buradan veri çeker
 app.get('/kontrol', (req, res) => {
-    try {
-        res.json(veri);
-        // Gönderilen geçici verileri temizle ama duyuruyu tut
-        veri.flash = ""; 
-        veri.hedef = ""; 
-        veri.mesaj = "";
-    } catch (err) {
-        console.error("Veri gönderme hatası:", err);
-        res.status(500).send("Hata");
-    }
+    if (req.query.p) havuz.p = req.query.p;
+    if (req.query.m) havuz.m = req.query.m;
+    res.json(havuz);
+    // Tek seferlik verileri gönderdikten sonra temizle
+    havuz.hedef = "";
+    havuz.mesaj = "";
+    // !flash veya !duyuru kullanıldıysa Roblox'un okuması için kısa süre tutulur
 });
 
 const client = new Client({ intents: [32768, 512, 1] });
@@ -27,23 +25,31 @@ client.on('messageCreate', async (m) => {
     const args = m.content.slice(1).trim().split(/ +/);
     const cmd = args.shift().toLowerCase();
 
-    try {
-        if (cmd === 'flash') {
-            veri.flash = args.join(' ');
-            m.reply("⚡ Flash iletildi.");
-        } else if (cmd === 'duyuru') {
-            veri.duyuru = args.join(' ');
-            m.reply("📢 Duyuru güncellendi.");
-        } else if (cmd === 'mesaj') {
-            if (args.length < 2) return m.reply("⚠️ Kullanım: !mesaj isim mesaj");
-            veri.hedef = args[0];
-            veri.mesaj = args.slice(1).join(' ');
-            m.reply(`✉️ **${args[0]}** için mesaj sıraya alındı.`);
-        }
-    } catch (e) {
-        console.log("Komut işleme hatası:", e);
+    if (cmd === 'duyuru' || cmd === 'flash') {
+        havuz.duyuru = args.join(' ');
+        m.reply(`⚡ **İşlem Tamam:** "${havuz.duyuru}" mesajı gönderildi.`);
+    } 
+    else if (cmd === 'kapat') {
+        havuz.duyuru = "KAPAT_KOMUTU"; // Roblox bunu görünce paneli anında kapatacak
+        m.reply("🚫 Ekrandaki tüm duyurular kapatıldı.");
+    }
+    else if (cmd === 'mesaj') {
+        if (args.length < 2) return m.reply("⚠️ Kullanım: !mesaj [OyuncuAdı] [Mesaj]");
+        havuz.hedef = args[0];
+        havuz.mesaj = args.slice(1).join(' ');
+        m.reply(`✉️ **${havuz.hedef}** için özel mesaj iletildi.`);
+    }
+    else if (cmd === 'durum') {
+        const embed = new EmbedBuilder()
+            .setTitle("📊 Sunucu Durumu")
+            .addFields(
+                { name: "👤 Oyuncu Sayısı", value: `${havuz.p} / ${havuz.m}`, inline: true },
+                { name: "📢 Son Duyuru", value: havuz.duyuru || "Yok", inline: false }
+            )
+            .setColor(0x00AEFF);
+        m.reply({ embeds: [embed] });
     }
 });
 
-app.listen(process.env.PORT || 3000, () => console.log("Bot Zırhlı Modda Aktif."));
+app.listen(process.env.PORT || 3000);
 client.login(process.env.TOKEN);
