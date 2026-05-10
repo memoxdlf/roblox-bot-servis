@@ -3,41 +3,43 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// MERKEZİ VERİ DEPOSU
+// VERİ DEPOSU
 let veriHavuzu = {
     flash: "",
     duyuru: "",
     saat: "",
     ozelHedef: "",
-    ozelMesaj: ""
+    ozelMesaj: "",
+    oyuncuSayisi: 0, // !durum için
+    maxOyuncu: 0     // !durum için
 };
 
 app.use(express.json());
 
-// ROBLOX VERİ ÇEKME NOKTASI (GET)
+// ROBLOX BURADAN VERİ ALIR VE OYUNCU SAYISINI GÖNDERİR
 app.get('/kontrol', (req, res) => {
+    // Roblox'tan gelen oyuncu sayılarını kaydet
+    if (req.query.p) veriHavuzu.oyuncuSayisi = req.query.p;
+    if (req.query.m) veriHavuzu.maxOyuncu = req.query.m;
+
     res.json(veriHavuzu);
     
-    // Tek seferlik verileri gönderdikten sonra "sıfırla"
+    // Tek seferlikleri sıfırla
     veriHavuzu.flash = "";
     veriHavuzu.saat = "";
     veriHavuzu.ozelHedef = "";
     veriHavuzu.ozelMesaj = "";
-    // Duyuru sıfırlanmaz, yeni duyuruya kadar kalır.
 });
 
-// LOG SİSTEMİ (POST)
+// LOG SİSTEMİ (Aynen Kalıyor)
 app.post('/log', (req, res) => {
     const { tip, oyuncu } = req.body;
-    const kanal = client.channels.cache.get("LOG_KANAL_ID_BURAYA"); // BURAYA KANAL ID YAPIŞTIR
+    const kanal = client.channels.cache.get("LOG_KANAL_ID_BURAYA");
     if (kanal) {
-        const renk = tip === "GIRIS" ? 0x00FF00 : 0xFF0000;
-        const baslik = tip === "GIRIS" ? "📥 Giriş Yapıldı" : "📤 Çıkış Yapıldı";
         const embed = new EmbedBuilder()
-            .setTitle(baslik)
-            .setDescription(`**${oyuncu}** sunucuya ${tip === "GIRIS" ? "bağlandı" : "veda etti"}.`)
-            .setColor(renk)
-            .setTimestamp();
+            .setTitle(tip === "GIRIS" ? "📥 Giriş" : "📤 Çıkış")
+            .setDescription(`**${oyuncu}** sunucuya ${tip === "GIRIS" ? "girdi" : "çıktı"}.`)
+            .setColor(tip === "GIRIS" ? 0x00FF00 : 0xFF0000);
         kanal.send({ embeds: [embed] });
     }
     res.sendStatus(200);
@@ -49,29 +51,30 @@ const client = new Client({
 
 client.on('messageCreate', async (m) => {
     if (m.author.bot || !m.content.startsWith('!')) return;
-
     const args = m.content.slice(1).trim().split(/ +/);
     const komut = args.shift().toLowerCase();
 
-    if (komut === 'flash') {
-        veriHavuzu.flash = args.join(' ');
-        m.reply("🔥 Flash gönderildi.");
-    } 
-    else if (komut === 'duyuru') {
-        veriHavuzu.duyuru = args.join(' ');
-        m.reply("📢 Üst duyuru güncellendi.");
+    // !durum KOMUTU (TAMİR EDİLDİ)
+    if (komut === 'durum') {
+        const embed = new EmbedBuilder()
+            .setTitle("📊 Sunucu Durumu")
+            .addFields(
+                { name: "👤 Oyuncu Sayısı", value: `${veriHavuzu.oyuncuSayisi} / ${veriHavuzu.maxOyuncu}`, inline: true },
+                { name: "📢 Son Duyuru", value: veriHavuzu.duyuru || "Yok", inline: false }
+            )
+            .setColor(0x3498db);
+        m.reply({ embeds: [embed] });
     }
-    else if (komut === 'saat') {
-        veriHavuzu.saat = args[0];
-        m.reply(`⏰ Saat ${args[0]}:00 yapıldı.`);
-    }
-    else if (komut === 'mesaj') {
-        if (args.length < 2) return m.reply("⚠️ Kullanım: !mesaj isim mesaj");
+    
+    // DİĞER KOMUTLAR (!flash, !duyuru, !saat, !mesaj)
+    if (komut === 'flash') veriHavuzu.flash = args.join(' ');
+    if (komut === 'duyuru') veriHavuzu.duyuru = args.join(' ');
+    if (komut === 'saat') veriHavuzu.saat = args[0];
+    if (komut === 'mesaj') {
         veriHavuzu.ozelHedef = args[0];
         veriHavuzu.ozelMesaj = args.slice(1).join(' ');
-        m.reply(`✉️ **${args[0]}** için mesaj sıraya alındı.`);
     }
 });
 
-app.listen(port, () => console.log("Bot Beyni Hazır."));
+app.listen(port, () => console.log("Sistem Aktif"));
 client.login(process.env.TOKEN);
