@@ -3,18 +3,19 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-let shutdownStatus = false;
-let sonDuyuru = ""; 
 let flashMesaj = ""; 
+let sunucuSaati = ""; 
 let sunucuVerisi = { oyuncuSayisi: 0, maxOyuncu: 0 };
 
 app.get('/kontrol', (req, res) => {
-    if (req.query.players) sunucuVerisi.oyuncuSayisi = req.query.players;
-    if (req.query.maxPlayers) sunucuVerisi.maxOyuncu = req.query.maxPlayers;
-    res.json({ shutdown: shutdownStatus, duyuru: sonDuyuru, flash: flashMesaj });
+    res.json({ 
+        flash: flashMesaj,
+        saat: sunucuSaati
+    });
+    sunucuSaati = ""; // Saat bir kez iletildikten sonra sıfırlanır
 });
 
-app.listen(port, () => { console.log("Başmühendis Sistemi Aktif."); });
+app.listen(port, () => { console.log("Yönetim Paneli Başlatıldı."); });
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
@@ -23,38 +24,31 @@ const client = new Client({
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // FLASH KOMUTU KONTROLÜ
-    if (message.content.startsWith('!flash')) {
-        const icerik = message.content.replace('!flash', '').trim();
-
-        // EĞER MESAJ BOŞSA
-        if (!icerik) {
-            return message.reply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setTitle('⚠️ Hatalı Kullanım')
-                        .setDescription('**Başmühendis Talimatı:** Lütfen gönderilecek mesajı yazın!\n\n**Örnek:** `!flash Sunucu bakıma giriyor.`')
-                        .setColor(0xff0000) // Kırmızı uyarı
-                ]
-            });
-        }
-
-        // MESAJ DOLUYSA GÖNDER
-        flashMesaj = icerik;
-        message.reply(`🔥 **ACİL DURUM MESAJI YAYINLANDI:**\n> ${flashMesaj}`);
-        setTimeout(() => { flashMesaj = ""; }, 10000);
-    }
-
-    // !durum KOMUTU
+    // !durum - Sunucu Raporu
     if (message.content === '!durum') {
         const embed = new EmbedBuilder()
-            .setTitle('🏗️ BAŞMÜHENDİS SAHA RAPORU')
-            .setColor(0xffa500)
+            .setTitle('📊 SUNUCU ANALİZ RAPORU')
+            .setColor(0x2b2d31)
             .addFields(
-                { name: '👤 Oyuncu', value: `${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`, inline: true },
-                { name: '🌐 Durum', value: '🟢 Aktif', inline: true }
+                { name: '👤 Aktif Oyuncu', value: `${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`, inline: true },
+                { name: '🌐 Erişim', value: '🟢 Uzaktan Bağlantı Aktif', inline: true }
             );
         message.reply({ embeds: [embed] });
+    }
+
+    // !saat [0-24] - Zaman Kontrolü
+    if (message.content.startsWith('!saat ')) {
+        sunucuSaati = message.content.replace('!saat ', '').trim();
+        message.reply(`⏰ Oyun saati **${sunucuSaati}:00** olarak güncellendi.`);
+    }
+
+    // !flash [mesaj] - Modern Ekran Bildirimi
+    if (message.content.startsWith('!flash ')) {
+        flashMesaj = message.content.replace('!flash ', '').trim();
+        if (!flashMesaj) return message.reply("⚠️ Lütfen bir mesaj içeriği girin!");
+        
+        message.reply(`⚡ **FLASH BİLDİRİM GÖNDERİLDİ:**\n> ${flashMesaj}`);
+        setTimeout(() => { flashMesaj = ""; }, 10000);
     }
 });
 
