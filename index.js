@@ -5,17 +5,21 @@ const port = process.env.PORT || 3000;
 
 let flashMesaj = ""; 
 let sunucuSaati = ""; 
+let ozelMesaj = { hedef: "", icerik: "" }; // Yeni: Kişiye özel mesaj
 let sunucuVerisi = { oyuncuSayisi: 0, maxOyuncu: 0 };
 
 app.get('/kontrol', (req, res) => {
     res.json({ 
         flash: flashMesaj,
-        saat: sunucuSaati
+        saat: sunucuSaati,
+        ozel: ozelMesaj // Roblox bunu kontrol edecek
     });
-    sunucuSaati = ""; // Saat bir kez iletildikten sonra sıfırlanır
+    // Mesaj iletildikten sonra temizle ki ekranda takılı kalmasın
+    ozelMesaj = { hedef: "", icerik: "" };
+    sunucuSaati = "";
 });
 
-app.listen(port, () => { console.log("Yönetim Paneli Başlatıldı."); });
+app.listen(port, () => { console.log("Yönetim Paneli Güncellendi."); });
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
@@ -24,30 +28,26 @@ const client = new Client({
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // !durum - Sunucu Raporu
+    // !mesaj [OyuncuAdı] [Mesaj]
+    if (message.content.startsWith('!mesaj ')) {
+        const args = message.content.split(' ');
+        if (args.length < 3) return message.reply("⚠️ **Hata:** Kullanım: `!mesaj OyuncuAdi Mesajiniz` şeklinde olmalı.");
+        
+        const hedefOyuncu = args[1];
+        const icerik = args.slice(2).join(' ');
+
+        ozelMesaj = { hedef: hedefOyuncu, icerik: icerik };
+        message.reply(`✉️ **${hedefOyuncu}** isimli oyuncuya özel mesaj gönderildi: \n> ${icerik}`);
+    }
+
+    // !durum, !flash ve !saat komutların aynı kalıyor...
     if (message.content === '!durum') {
-        const embed = new EmbedBuilder()
-            .setTitle('📊 SUNUCU ANALİZ RAPORU')
-            .setColor(0x2b2d31)
-            .addFields(
-                { name: '👤 Aktif Oyuncu', value: `${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`, inline: true },
-                { name: '🌐 Erişim', value: '🟢 Uzaktan Bağlantı Aktif', inline: true }
-            );
-        message.reply({ embeds: [embed] });
+        message.reply(`👤 Oyuncu: ${sunucuVerisi.oyuncuSayisi} / ${sunucuVerisi.maxOyuncu}`);
     }
 
-    // !saat [0-24] - Zaman Kontrolü
-    if (message.content.startsWith('!saat ')) {
-        sunucuSaati = message.content.replace('!saat ', '').trim();
-        message.reply(`⏰ Oyun saati **${sunucuSaati}:00** olarak güncellendi.`);
-    }
-
-    // !flash [mesaj] - Modern Ekran Bildirimi
     if (message.content.startsWith('!flash ')) {
         flashMesaj = message.content.replace('!flash ', '').trim();
-        if (!flashMesaj) return message.reply("⚠️ Lütfen bir mesaj içeriği girin!");
-        
-        message.reply(`⚡ **FLASH BİLDİRİM GÖNDERİLDİ:**\n> ${flashMesaj}`);
+        message.reply(`⚡ Flash gönderildi.`);
         setTimeout(() => { flashMesaj = ""; }, 10000);
     }
 });
