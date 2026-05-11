@@ -1,107 +1,55 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// SİSTEM HAFIZASI
-let havuz = { 
-    duyuru: "", 
-    mesaj: "", 
-    kickHedef: "", 
-    p: 0, 
-    m: 0, 
-    aktifOyuncular: [] 
-};
+// SİSTEM HAFIZASI (Sadece Yönetim)
+let havuz = { duyuru: "", mesaj: "", kickHedef: "", chatTemizle: false };
 
 app.use(express.json());
 
-// UPTIME VE ROBLOX KONTROL NOKTASI
 app.get('/kontrol', (req, res) => {
-    if (req.query.p) havuz.p = req.query.p;
-    if (req.query.m) havuz.m = req.query.m;
-    if (req.query.users) havuz.aktifOyuncular = req.query.users.split(",");
-
     res.json(havuz);
-    
-    // Verileri aktardıktan sonra geçici olanları temizle (Döngüye girmemesi için)
+    // Roblox veriyi çektiği an havuzu temizle (Tekrarı ve ban hatalarını önler)
     havuz.duyuru = ""; 
     havuz.kickHedef = ""; 
-    havuz.mesaj = ""; 
+    havuz.chatTemizle = false;
 });
 
-// ANA SAYFA (UptimeRobot burayı kontrol ederek botu uyutmaz)
-app.get('/', (req, res) => res.send("<h1>Sistem 7/24 Aktif!</h1>"));
+app.get('/', (req, res) => res.send("Yönetim Paneli Aktif!"));
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// SLASH KOMUT TANIMLARI
 const commands = [
-    new SlashCommandBuilder()
-        .setName('shutdown')
-        .setDescription('Sunucuyu GÜNCELLEYEREK yeniden başlatır (Rejoin).')
-        .addStringOption(opt => opt.setName('sebep').setDescription('Yeniden başlatma sebebi.').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('kick')
-        .setDescription('Oyuncuyu sunucudan atar.')
-        .addStringOption(opt => opt.setName('oyuncu').setDescription('Oyuncu adı').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('duyuru')
-        .setDescription('Ekrana duyuru gönderir.')
-        .addStringOption(opt => opt.setName('mesaj').setDescription('Duyuru metni').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('durum')
-        .setDescription('Aktif oyuncu istatistiklerini gösterir.')
-].map(command => command.toJSON());
+    new SlashCommandBuilder().setName('shutdown').setDescription('Sunucuyu günceller ve herkesi aktarır.').addStringOption(o => o.setName('sebep').setDescription('Neden?').setRequired(true)),
+    new SlashCommandBuilder().setName('kick').setDescription('Oyuncuyu sunucudan atar.').addStringOption(o => o.setName('oyuncu').setDescription('Kullanıcı Adı').setRequired(true)),
+    new SlashCommandBuilder().setName('chat-temizle').setDescription('Oyun içindeki tüm sohbeti temizler.')
+].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('--- Slash Komutları Başarıyla Yüklendi ---');
-        console.log('--- Bot 7/24 Modunda Çalışıyor ---');
+        console.log('Yönetim Botu Hazır!');
     } catch (e) { console.error(e); }
 });
 
-// KOMUT ETKİLEŞİMLERİ
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'shutdown') {
-        const sebep = interaction.options.getString('sebep');
         havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
-        havuz.mesaj = sebep;
-        await interaction.reply(`🛑 **GÜNCELLEME BAŞLATILDI!**\n**Sebep:** ${sebep}\n*Oyuncular en yeni sürüme aktarılıyor...*`);
-    } 
-    
-    else if (interaction.commandName === 'kick') {
-        const oyuncu = interaction.options.getString('oyuncu');
-        const oyundaMi = havuz.aktifOyuncular.some(n => n.toLowerCase() === oyuncu.toLowerCase());
-        
-        if (!oyundaMi) return interaction.reply({ content: `❌ **${oyuncu}** şu an oyunda değil!`, ephemeral: true });
-        
-        havuz.kickHedef = oyuncu;
-        await interaction.reply(`👞 **${oyuncu}** başarıyla sunucudan atıldı.`);
-    } 
-    
-    else if (interaction.commandName === 'duyuru') {
-        const msg = interaction.options.getString('mesaj');
-        havuz.duyuru = msg;
-        await interaction.reply(`📢 Duyuru gönderildi: *${msg}*`);
-    } 
-    
-    else if (interaction.commandName === 'durum') {
-        const embed = new EmbedBuilder()
-            .setTitle("📊 Sunucu Durumu")
-            .setColor(0x3498db)
-            .setTimestamp()
-            .addFields(
-                { name: "👤 Oyuncu Sayısı", value: `**${havuz.p} / ${havuz.m}**`, inline: true },
-                { name: "👥 Aktif Listesi", value: `\`\`\`${havuz.aktifOyuncular.join(", ") || "Kimse yok"}\`\`\`` }
-            );
-        await interaction.reply({ embeds: [embed] });
+        havuz.mesaj = interaction.options.getString('sebep');
+        await interaction.reply("✅ **Shutdown** işlemi başlatıldı.");
+    } else if (interaction.commandName === 'kick') {
+        havuz.kickHedef = interaction.options.getString('oyuncu');
+        await interaction.reply(`👞 **${havuz.kickHedef}** sunucudan atıldı.`);
+    } else if (interaction.commandName === 'chat-temizle') {
+        havuz.chatTemizle = true;
+        await interaction.reply("🧹 Chat başarıyla temizlendi.");
     }
 });
 
-app.listen(port, () => console.log(`Sunucu ${port} portunda hazır.`));
+app.listen(port);
 client.login(process.env.TOKEN);
