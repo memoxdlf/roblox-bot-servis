@@ -1,62 +1,104 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// ROBLOX'UN BEKLEDİĞİ ANAHTARLAR
+// ROBLOX VERİ HAVUZU
 let havuz = { duyuru: "", mesaj: "", kickHedef: "", chatTemizle: false };
 
 app.use(express.json());
 
+// ROBLOX'UN VERİ ÇEKTİĞİ NOKTA
 app.get('/kontrol', (req, res) => {
-    res.json(havuz);
-    // Roblox veriyi çektiği an sıfırla ki döngüye girmesin
-    havuz.duyuru = ""; 
-    havuz.kickHedef = ""; 
-    havuz.chatTemizle = false;
+    try {
+        res.status(200).json(havuz);
+        // Veri iletildiği an kritik verileri sıfırla ki döngüye girmesin
+        havuz.duyuru = ""; 
+        havuz.kickHedef = ""; 
+        havuz.chatTemizle = false;
+    } catch (e) {
+        console.error("Havuz hatası:", e);
+    }
 });
+
+app.get('/', (req, res) => res.send("Sistem Başmühendisi Aktif!"));
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
+// KOMUTLARIN TANIMLANMASI
 const commands = [
-    new SlashCommandBuilder().setName('shutdown').setDescription('Sunucuyu günceller.').addStringOption(o => o.setName('sebep').setDescription('Neden?').setRequired(true)),
-    new SlashCommandBuilder().setName('duyuru').setDescription('Ekrana duyuru gönderir.').addStringOption(o => o.setName('mesaj').setDescription('Metin?').setRequired(true)),
-    new SlashCommandBuilder().setName('kick').setDescription('Oyuncuyu atar.').addStringOption(o => o.setName('oyuncu').setDescription('Username?').setRequired(true)),
-    new SlashCommandBuilder().setName('chat-temizle').setDescription('Sohbeti temizler.')
+    new SlashCommandBuilder()
+        .setName('shutdown')
+        .setDescription('Sunucuyu günceller ve herkesi otomatik olarak yeni sunucuya aktarır.')
+        .addStringOption(o => o.setName('sebep').setDescription('Shutdown nedeni?').setRequired(true)),
+    
+    new SlashCommandBuilder()
+        .setName('duyuru')
+        .setDescription('Oyun içindeki tüm oyuncuların ekranına sistem duyurusu gönderir.')
+        .addStringOption(o => o.setName('mesaj').setDescription('Duyuru metni?').setRequired(true)),
+        
+    new SlashCommandBuilder()
+        .setName('kick')
+        .setDescription('Belirtilen kullanıcıyı oyundan anında atar.')
+        .addStringOption(o => o.setName('oyuncu').setDescription('Roblox Kullanıcı Adı?').setRequired(true)),
+        
+    new SlashCommandBuilder()
+        .setName('chat-temizle')
+        .setDescription('Oyun içi sohbeti herkes için temizler.')
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
+// BOT HAZIR OLDUĞUNDA KOMUTLARI YÜKLE
 client.once('ready', async () => {
     try {
+        console.log(`${client.user.tag} girişi yapıldı!`);
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('Komutlar yüklendi.');
-    } catch (e) { console.error(e); }
+        console.log('Komutlar başarıyla senkronize edildi.');
+    } catch (e) { console.error('Yükleme hatası:', e); }
 });
 
+// KOMUT İŞLEME
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    try { await interaction.deferReply({ flags: MessageFlags.Ephemeral }); } catch (e) { return; }
+    // "Unknown Interaction" hatasını engellemek için anında cevap başlatıyoruz
+    // Burada flags: MessageFlags.Ephemeral KULLANMIYORUZ ki herkes görsün.
+    try {
+        await interaction.deferReply(); 
+    } catch (e) {
+        console.error("Defer hatası:", e);
+        return;
+    }
 
-    const cmd = interaction.commandName;
+    const { commandName, options } = interaction;
 
-    if (cmd === 'duyuru') {
-        havuz.duyuru = "NORMAL_DUYURU"; // Roblox bu etiketi bekliyor
-        havuz.mesaj = interaction.options.getString('mesaj');
-        await interaction.editReply("📢 Duyuru sisteme iletildi.");
-    } else if (cmd === 'shutdown') {
-        havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
-        havuz.mesaj = interaction.options.getString('sebep');
-        await interaction.editReply("🛑 Shutdown başlatıldı.");
-    } else if (cmd === 'kick') {
-        havuz.kickHedef = interaction.options.getString('oyuncu');
-        await interaction.editReply(`👞 ${havuz.kickHedef} atılıyor.`);
-    } else if (cmd === 'chat-temizle') {
-        havuz.chatTemizle = true;
-        await interaction.editReply("🧹 Chat temizleniyor.");
+    try {
+        if (commandName === 'shutdown') {
+            havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
+            havuz.mesaj = options.getString('sebep');
+            await interaction.editReply(`🛑 **Shutdown Başlatıldı:** ${havuz.mesaj}`);
+        } 
+        else if (commandName === 'duyuru') {
+            havuz.duyuru = "NORMAL_DUYURU";
+            havuz.mesaj = options.getString('mesaj');
+            await interaction.editReply(`📢 **Sistem Duyurusu Gönderildi:** ${havuz.mesaj}`);
+        } 
+        else if (commandName === 'kick') {
+            havuz.kickHedef = options.getString('oyuncu');
+            await interaction.editReply(`👞 **${havuz.kickHedef}** sunucudan atıldı.`);
+        } 
+        else if (commandName === 'chat-temizle') {
+            havuz.chatTemizle = true;
+            await interaction.editReply(`🧹 **Sohbet temizlendi.**`);
+        }
+    } catch (err) {
+        console.error("Komut işleme hatası:", err);
+        // Hata durumunda kanala bilgi ver
+        try { await interaction.editReply("❌ İşlem sırasında bir hata oluştu."); } catch(e){}
     }
 });
 
-app.listen(port);
+// SERVER BAŞLAT
+app.listen(port, () => console.log(`Web servisi ${port} portunda hazır.`));
 client.login(process.env.TOKEN);
