@@ -3,7 +3,7 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// SISTEM HAFIZASI
+// SİSTEM HAFIZASI
 let havuz = { 
     duyuru: "", 
     hedef: "", 
@@ -16,7 +16,7 @@ let havuz = {
 
 app.use(express.json());
 
-// ROBLOX VERI CEKME NOKTASI
+// UPTIME VE ROBLOX KONTROL NOKTASI
 app.get('/kontrol', (req, res) => {
     if (req.query.p) havuz.p = req.query.p;
     if (req.query.m) havuz.m = req.query.m;
@@ -30,6 +30,9 @@ app.get('/kontrol', (req, res) => {
     havuz.hedef = ""; 
     havuz.mesaj = ""; 
 });
+
+// ANA SAYFA (UptimeRobot burayı kontrol ederek botu 7/24 uyanık tutar)
+app.get('/', (req, res) => res.send("Sistem 7/24 Aktif!"));
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -52,13 +55,12 @@ const commands = [
         .setDescription('Sunucu anlık durumunu gösterir.')
 ].map(command => command.toJSON());
 
-// KOMUTLARI KAYDET
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('Slash komutları sisteme yüklendi!');
+        console.log('Slash komutları hazır ve 7/24 moduna geçildi!');
     } catch (e) { console.error(e); }
 });
 
@@ -69,37 +71,36 @@ client.on('interactionCreate', async interaction => {
     if (interaction.commandName === 'shutdown') {
         const sebep = interaction.options.getString('sebep');
         havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
-        havuz.mesaj = sebep; // Sebebi Roblox'a iletmek için mesaj kutusuna koyduk
-        await interaction.reply(`🛑 **Shutdown başlatıldı!**\n**Sebep:** ${sebep}`);
-    }
-
+        havuz.mesaj = sebep; 
+        await interaction.reply(`🛑 **Sunucu Kapatılıyor!**\n**Sebep:** ${sebep}`);
+    } 
+    
     else if (interaction.commandName === 'kick') {
         const oyuncu = interaction.options.getString('oyuncu');
         const oyundaMi = havuz.aktifOyuncular.some(n => n.toLowerCase() === oyuncu.toLowerCase());
-        
         if (!oyundaMi) return interaction.reply({ content: `❌ **${oyuncu}** şu an oyunda değil!`, ephemeral: true });
         
         havuz.kickHedef = oyuncu;
         await interaction.reply(`👞 **${oyuncu}** sunucudan atılıyor.`);
-    }
-
+    } 
+    
     else if (interaction.commandName === 'duyuru') {
         const msg = interaction.options.getString('mesaj');
         havuz.duyuru = msg;
         await interaction.reply(`📢 Duyuru iletildi: *${msg}*`);
-    }
-
+    } 
+    
     else if (interaction.commandName === 'durum') {
         const embed = new EmbedBuilder()
             .setTitle("📊 Sunucu Durumu")
             .setColor(0x2ecc71)
             .addFields(
-                { name: "👤 Oyuncu Sayısı", value: `${havuz.p}/${havuz.m}`, inline: true },
-                { name: "👥 Aktif Listesi", value: `\`${havuz.aktifOyuncular.join(", ") || "Kimse yok"}\`` }
+                { name: "👤 Oyuncu", value: `${havuz.p}/${havuz.m}`, inline: true },
+                { name: "👥 Aktifler", value: `\`${havuz.aktifOyuncular.join(", ") || "Kimse yok"}\`` }
             );
         await interaction.reply({ embeds: [embed] });
     }
 });
 
-app.listen(port, () => console.log("Modern Bot Aktif."));
+app.listen(port, () => console.log("Web Server Yayında."));
 client.login(process.env.TOKEN);
