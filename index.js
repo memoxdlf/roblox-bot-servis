@@ -4,15 +4,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // SİSTEM HAFIZASI
-let havuz = { 
-    duyuru: "", 
-    hedef: "", 
-    mesaj: "", 
-    kickHedef: "", 
-    p: 0, 
-    m: 0, 
-    aktifOyuncular: [] 
-};
+let havuz = { duyuru: "", mesaj: "", kickHedef: "", p: 0, m: 0, aktifOyuncular: [] };
 
 app.use(express.json());
 
@@ -24,15 +16,14 @@ app.get('/kontrol', (req, res) => {
 
     res.json(havuz);
     
-    // Verileri aktardıktan sonra temizle (döngüye girmemesi için)
+    // Verileri aktardıktan sonra temizle
     havuz.duyuru = ""; 
     havuz.kickHedef = ""; 
-    havuz.hedef = ""; 
     havuz.mesaj = ""; 
 });
 
-// ANA SAYFA (UptimeRobot burayı kontrol ederek botu 7/24 uyanık tutar)
-app.get('/', (req, res) => res.send("Sistem 7/24 Aktif!"));
+// ANA SAYFA (UptimeRobot için uyanık kalma noktası)
+app.get('/', (req, res) => res.send("Bot 7/24 Aktif!"));
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -40,19 +31,19 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const commands = [
     new SlashCommandBuilder()
         .setName('shutdown')
-        .setDescription('Sunucuyu geri sayımla kapatır.')
-        .addStringOption(opt => opt.setName('sebep').setDescription('Kapatma sebebini yazın.').setRequired(true)),
+        .setDescription('Sunucuyu geri sayımla yeniden başlatır (Rejoin).')
+        .addStringOption(opt => opt.setName('sebep').setDescription('Yeniden başlatma sebebi.').setRequired(true)),
     new SlashCommandBuilder()
         .setName('kick')
         .setDescription('Oyuncuyu sunucudan atar.')
         .addStringOption(opt => opt.setName('oyuncu').setDescription('Oyuncu adı').setRequired(true)),
     new SlashCommandBuilder()
         .setName('duyuru')
-        .setDescription('Sunucuya duyuru gönderir.')
+        .setDescription('Ekrana duyuru gönderir.')
         .addStringOption(opt => opt.setName('mesaj').setDescription('Duyuru metni').setRequired(true)),
     new SlashCommandBuilder()
         .setName('durum')
-        .setDescription('Sunucu anlık durumunu gösterir.')
+        .setDescription('Aktif oyuncuları gösterir.')
 ].map(command => command.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -60,40 +51,35 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('Slash komutları hazır ve 7/24 moduna geçildi!');
+        console.log('Slash komutları hazır ve 7/24 aktif!');
     } catch (e) { console.error(e); }
 });
 
-// KOMUT ETKİLEŞİMLERİ
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'shutdown') {
         const sebep = interaction.options.getString('sebep');
         havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
-        havuz.mesaj = sebep; 
-        await interaction.reply(`🛑 **Sunucu Kapatılıyor!**\n**Sebep:** ${sebep}`);
+        havuz.mesaj = sebep;
+        await interaction.reply(`🛑 **Restart Başlatıldı!** Oyuncular yeni sunucuya aktarılacak.\n**Sebep:** ${sebep}`);
     } 
-    
     else if (interaction.commandName === 'kick') {
         const oyuncu = interaction.options.getString('oyuncu');
         const oyundaMi = havuz.aktifOyuncular.some(n => n.toLowerCase() === oyuncu.toLowerCase());
-        if (!oyundaMi) return interaction.reply({ content: `❌ **${oyuncu}** şu an oyunda değil!`, ephemeral: true });
-        
+        if (!oyundaMi) return interaction.reply({ content: `❌ **${oyuncu}** oyunda değil!`, ephemeral: true });
         havuz.kickHedef = oyuncu;
-        await interaction.reply(`👞 **${oyuncu}** sunucudan atılıyor.`);
+        await interaction.reply(`👞 **${oyuncu}** sunucudan atıldı.`);
     } 
-    
     else if (interaction.commandName === 'duyuru') {
         const msg = interaction.options.getString('mesaj');
         havuz.duyuru = msg;
-        await interaction.reply(`📢 Duyuru iletildi: *${msg}*`);
+        await interaction.reply(`📢 Duyuru iletildi.`);
     } 
-    
     else if (interaction.commandName === 'durum') {
         const embed = new EmbedBuilder()
             .setTitle("📊 Sunucu Durumu")
-            .setColor(0x2ecc71)
+            .setColor(0x3498db)
             .addFields(
                 { name: "👤 Oyuncu", value: `${havuz.p}/${havuz.m}`, inline: true },
                 { name: "👥 Aktifler", value: `\`${havuz.aktifOyuncular.join(", ") || "Kimse yok"}\`` }
@@ -102,5 +88,5 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-app.listen(port, () => console.log("Web Server Yayında."));
+app.listen(port, () => console.log("Server 7/24 Aktif."));
 client.login(process.env.TOKEN);
