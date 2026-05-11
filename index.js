@@ -8,14 +8,15 @@ let havuz = {
     duyuru: "", 
     mesaj: "", 
     kickHedef: "", 
-    p: 0, 
-    m: 0, 
-    aktifOyuncular: [] 
+    paraHedef: null, 
+    paraMiktar: null,
+    chatTemizle: false,
+    p: 0, m: 0, aktifOyuncular: [] 
 };
 
 app.use(express.json());
 
-// UPTIME VE ROBLOX KONTROL NOKTASI
+// ROBLOX VERİ ÇEKME NOKTASI
 app.get('/kontrol', (req, res) => {
     if (req.query.p) havuz.p = req.query.p;
     if (req.query.m) havuz.m = req.query.m;
@@ -23,85 +24,58 @@ app.get('/kontrol', (req, res) => {
 
     res.json(havuz);
     
-    // Verileri aktardıktan sonra geçici olanları temizle (Döngüye girmemesi için)
+    // VERİ GÖNDERİLDİKTEN SONRA SIFIRLA (KRİTİK)
     havuz.duyuru = ""; 
     havuz.kickHedef = ""; 
-    havuz.mesaj = ""; 
+    havuz.paraHedef = null;
+    havuz.paraMiktar = null;
+    havuz.chatTemizle = false;
 });
-
-// ANA SAYFA (UptimeRobot burayı kontrol ederek botu uyutmaz)
-app.get('/', (req, res) => res.send("<h1>Sistem 7/24 Aktif!</h1>"));
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// SLASH KOMUT TANIMLARI
 const commands = [
-    new SlashCommandBuilder()
-        .setName('shutdown')
-        .setDescription('Sunucuyu GÜNCELLEYEREK yeniden başlatır (Rejoin).')
-        .addStringOption(opt => opt.setName('sebep').setDescription('Yeniden başlatma sebebi.').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('kick')
-        .setDescription('Oyuncuyu sunucudan atar.')
-        .addStringOption(opt => opt.setName('oyuncu').setDescription('Oyuncu adı').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('duyuru')
-        .setDescription('Ekrana duyuru gönderir.')
-        .addStringOption(opt => opt.setName('mesaj').setDescription('Duyuru metni').setRequired(true)),
-    new SlashCommandBuilder()
-        .setName('durum')
-        .setDescription('Aktif oyuncu istatistiklerini gösterir.')
-].map(command => command.toJSON());
+    new SlashCommandBuilder().setName('shutdown').setDescription('Sunucuyu güncelleyerek yeniden başlatır.').addStringOption(o => o.setName('sebep').setDescription('Neden?').setRequired(true)),
+    new SlashCommandBuilder().setName('kick').setDescription('Oyuncuyu sunucudan atar.').addStringOption(o => o.setName('oyuncu').setDescription('Adı').setRequired(true)),
+    new SlashCommandBuilder().setName('para-ver').setDescription('Oyuncuya nakit verir.').addStringOption(o => o.setName('oyuncu').setDescription('Adı').setRequired(true)).addIntegerOption(o => o.setName('miktar').setDescription('Miktar').setRequired(true)),
+    new SlashCommandBuilder().setName('duyuru').setDescription('Ekrana yazı gönderir.').addStringOption(o => o.setName('mesaj').setDescription('Yazı').setRequired(true)),
+    new SlashCommandBuilder().setName('chat-temizle').setDescription('Oyun chatini temizler.'),
+    new SlashCommandBuilder().setName('durum').setDescription('Aktif oyuncu sayısı.')
+].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log('--- Slash Komutları Başarıyla Yüklendi ---');
-        console.log('--- Bot 7/24 Modunda Çalışıyor ---');
+        console.log('Komutlar başarıyla yüklendi!');
     } catch (e) { console.error(e); }
 });
 
-// KOMUT ETKİLEŞİMLERİ
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'shutdown') {
-        const sebep = interaction.options.getString('sebep');
         havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
-        havuz.mesaj = sebep;
-        await interaction.reply(`🛑 **GÜNCELLEME BAŞLATILDI!**\n**Sebep:** ${sebep}\n*Oyuncular en yeni sürüme aktarılıyor...*`);
-    } 
-    
-    else if (interaction.commandName === 'kick') {
-        const oyuncu = interaction.options.getString('oyuncu');
-        const oyundaMi = havuz.aktifOyuncular.some(n => n.toLowerCase() === oyuncu.toLowerCase());
-        
-        if (!oyundaMi) return interaction.reply({ content: `❌ **${oyuncu}** şu an oyunda değil!`, ephemeral: true });
-        
-        havuz.kickHedef = oyuncu;
-        await interaction.reply(`👞 **${oyuncu}** başarıyla sunucudan atıldı.`);
-    } 
-    
-    else if (interaction.commandName === 'duyuru') {
-        const msg = interaction.options.getString('mesaj');
-        havuz.duyuru = msg;
-        await interaction.reply(`📢 Duyuru gönderildi: *${msg}*`);
-    } 
-    
-    else if (interaction.commandName === 'durum') {
-        const embed = new EmbedBuilder()
-            .setTitle("📊 Sunucu Durumu")
-            .setColor(0x3498db)
-            .setTimestamp()
-            .addFields(
-                { name: "👤 Oyuncu Sayısı", value: `**${havuz.p} / ${havuz.m}**`, inline: true },
-                { name: "👥 Aktif Listesi", value: `\`\`\`${havuz.aktifOyuncular.join(", ") || "Kimse yok"}\`\`\`` }
-            );
-        await interaction.reply({ embeds: [embed] });
+        havuz.mesaj = interaction.options.getString('sebep');
+        await interaction.reply("🛑 Sunucu kapatma ve rejoin işlemi başlatıldı.");
+    } else if (interaction.commandName === 'para-ver') {
+        havuz.paraHedef = interaction.options.getString('oyuncu');
+        havuz.paraMiktar = interaction.options.getInteger('miktar');
+        await interaction.reply(`💸 **${havuz.paraHedef}** oyuncusuna **${havuz.paraMiktar} TL** aktarılıyor.`);
+    } else if (interaction.commandName === 'chat-temizle') {
+        havuz.chatTemizle = true;
+        await interaction.reply("🧹 Oyun içi sohbet temizlendi.");
+    } else if (interaction.commandName === 'kick') {
+        havuz.kickHedef = interaction.options.getString('oyuncu');
+        await interaction.reply(`👞 **${havuz.kickHedef}** sunucudan uzaklaştırıldı.`);
+    } else if (interaction.commandName === 'duyuru') {
+        havuz.duyuru = interaction.options.getString('mesaj');
+        await interaction.reply("📢 Ekran duyurusu gönderildi.");
+    } else if (interaction.commandName === 'durum') {
+        await interaction.reply(`📊 **Aktif Oyuncu:** ${havuz.p} / ${havuz.m}`);
     }
 });
 
-app.listen(port, () => console.log(`Sunucu ${port} portunda hazır.`));
+app.listen(port);
 client.login(process.env.TOKEN);
