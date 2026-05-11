@@ -3,23 +3,21 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- VERİ HAVUZU VE SUNUCU TAKİBİ ---
+// VERİ HAVUZU
 let havuz = { duyuru: "", mesaj: "", ozelHedef: "", kickHedef: "", chatTemizle: false };
 let sunucuDurum = { aktif: false, sonGorulme: 0, oyuncular: [] };
 
 app.use(express.json());
 
-// Roblox hem durum raporu verir (POST) hem de komut çeker (GET)
+// ROBLOX İLETİŞİM NOKTASI (Hem POST hem GET destekli)
 app.all('/kontrol', (req, res) => {
-    // 1. Roblox'tan gelen oyuncu listesini kaydet
     if (req.method === 'POST') {
         sunucuDurum.aktif = true;
         sunucuDurum.sonGorulme = Date.now();
         sunucuDurum.oyuncular = req.body.oyuncular || [];
-        return res.status(200).json({ status: "veriler_alindi" });
+        return res.status(200).json({ status: "ok" });
     }
-    
-    // 2. Roblox veri çekerken havuzu gönder ve hemen sıfırla
+    // GET İsteğinde havuzu gönder ve temizle
     res.status(200).json(havuz);
     havuz.duyuru = ""; 
     havuz.ozelHedef = ""; 
@@ -27,15 +25,15 @@ app.all('/kontrol', (req, res) => {
     havuz.chatTemizle = false;
 });
 
-app.get('/', (req, res) => res.send("Sistem Aktif!"));
+app.get('/', (req, res) => res.send("Sistem Başmühendisi Çevrimiçi!"));
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// --- KOMUT KAYITLARI ---
+// SLASH KOMUTLARI
 const commands = [
-    new SlashCommandBuilder().setName('durum').setDescription('Sunucu aktifliğini ve oyuncuları listeler.'),
-    new SlashCommandBuilder().setName('duyuru').setDescription('Tüm sunucuya duyuru atar.').addStringOption(o => o.setName('mesaj').setDescription('Duyuru metni').setRequired(true)),
-    new SlashCommandBuilder().setName('mesaj').setDescription('Kişiye özel mesaj gönderir.').addStringOption(o => o.setName('oyuncu').setDescription('Kullanıcı Adı').setRequired(true)).addStringOption(o => o.setName('icerik').setDescription('Mesaj içeriği').setRequired(true)),
+    new SlashCommandBuilder().setName('durum').setDescription('Sunucu aktifliğini ve oyuncuları gösterir.'),
+    new SlashCommandBuilder().setName('duyuru').setDescription('Tüm sunucuya duyuru atar.').addStringOption(o => o.setName('mesaj').setDescription('Mesaj içeriği').setRequired(true)),
+    new SlashCommandBuilder().setName('mesaj').setDescription('Birine özel mesaj gönderir.').addStringOption(o => o.setName('oyuncu').setDescription('Kullanıcı adı').setRequired(true)).addStringOption(o => o.setName('icerik').setDescription('Mesaj').setRequired(true)),
     new SlashCommandBuilder().setName('shutdown').setDescription('Sunucuyu kapatır ve günceller.').addStringOption(o => o.setName('sebep').setDescription('Neden?').setRequired(true)),
     new SlashCommandBuilder().setName('kick').setDescription('Oyuncuyu atar.').addStringOption(o => o.setName('oyuncu').setDescription('Username').setRequired(true)),
     new SlashCommandBuilder().setName('chat-temizle').setDescription('Sohbeti temizler.')
@@ -46,11 +44,10 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log(`${client.user.tag} Hazır ve Komutlar Güncel!`);
-    } catch (e) { console.error(e); }
+        console.log(`${client.user.tag} girişi yaptı, komutlar hazır!`);
+    } catch (e) { console.error("Yükleme hatası:", e); }
 });
 
-// --- KOMUT İŞLEME ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     try { await interaction.deferReply(); } catch (e) { return; }
@@ -59,21 +56,41 @@ client.on('interactionCreate', async interaction => {
 
     if (commandName === 'durum') {
         const simdi = Date.now();
-        const fark = (simdi - sunucuDurum.sonGorulme) / 1000;
-        const isOnline = fark < 25; // 25 saniye sinyal gelmezse kapalı sayılır
+        const isOnline = (simdi - sunucuDurum.sonGorulme) / 1000 < 25;
+        const liste = sunucuDurum.oyuncular.length > 0 ? sunucuDurum.oyuncular.join(", ") : "Kimse yok.";
 
         const embed = new EmbedBuilder()
-            .setTitle('🎮 Oyun Sunucu Durumu')
-            .setColor(isOnline ? 0x2ECC71 : 0xE74C3C)
+            .setTitle('🎮 Sunucu Durum Raporu')
+            .setColor(isOnline ? 0x00FF00 : 0xFF0000)
             .addFields(
                 { name: 'Durum', value: isOnline ? "🟢 Aktif" : "🔴 Kapalı", inline: true },
-                { name: 'Oyuncu Sayısı', value: `${sunucuDurum.oyuncular.length} / 50`, inline: true },
-                { name: 'Aktif Oyuncular', value: sunucuDurum.oyuncular.length > 0 ? "
-http://googleusercontent.com/immersive_entry_chip/0
+                { name: 'Oyuncu Sayısı', value: `${sunucuDurum.oyuncular.length}`, inline: true },
+                { name: 'Oyundakiler', value: "```" + liste + "```" }
+            )
+            .setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
 
-### Kurulum Hatırlatması (Son Kez):
-1.  **Render Linki:** Roblox kodunun üstündeki `URL` kısmının sonuna `/kontrol` eklemeyi unutma.
-2.  **Discord Komutları:** Kodu yükledikten sonra Discord'da komutlar hemen görünmezse uygulamayı kapatıp aç.
-3.  **Permissions:** Roblox Studio'da **Allow HTTP Requests** ve **Enable Studio Access to API Services** seçenekleri açık olmalı.
+    } else if (commandName === 'duyuru') {
+        havuz.duyuru = "NORMAL_DUYURU";
+        havuz.mesaj = options.getString('mesaj');
+        await interaction.editReply(`📢 Duyuru iletildi: **${havuz.mesaj}**`);
+    } else if (commandName === 'mesaj') {
+        havuz.duyuru = "OZEL_MESAJ";
+        havuz.ozelHedef = options.getString('oyuncu');
+        havuz.mesaj = options.getString('icerik');
+        await interaction.editReply(`✉️ **${havuz.ozelHedef}** oyuncusuna özel mesaj gönderildi.`);
+    } else if (commandName === 'shutdown') {
+        havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
+        havuz.mesaj = options.getString('sebep');
+        await interaction.editReply(`🛑 Shutdown emri verildi!`);
+    } else if (commandName === 'kick') {
+        havuz.kickHedef = options.getString('oyuncu');
+        await interaction.editReply(`👞 **${havuz.kickHedef}** sunucudan atıldı.`);
+    } else if (commandName === 'chat-temizle') {
+        havuz.chatTemizle = true;
+        await interaction.editReply(`🧹 Chat temizlendi.`);
+    }
+});
 
-Hayırlı olsun agam, sistemin şimdi canavar gibi çalışacak! 🚀🧱
+app.listen(port, () => console.log(`Web servisi ${port} portunda hazır.`));
+client.login(process.env.TOKEN);
