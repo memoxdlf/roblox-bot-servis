@@ -33,6 +33,7 @@ app.all('/kontrol', (req, res) => {
     const gonderilecekVeri = { ...havuz };
     res.status(200).json(gonderilecekVeri);
     
+    // Roblox veriyi çektiğinde geçici komutları temizle
     havuz.duyuru = ""; 
     havuz.ozelHedef = ""; 
     havuz.kickHedef = ""; 
@@ -62,7 +63,14 @@ const commands = [
         .setDescription('Yasağı kaldırır.')
         .addStringOption(o => o.setName('oyuncu').setDescription('İsim').setRequired(true)),
     new SlashCommandBuilder().setName('duyuru').setDescription('Duyuru atar.').addStringOption(o => o.setName('mesaj').setDescription('İçerik').setRequired(true)),
-    new SlashCommandBuilder().setName('shutdown').setDescription('10 saniye geri sayımlı kapatma.')
+    new SlashCommandBuilder()
+        .setName('shutdown')
+        .setDescription('10 saniye geri sayım ile sunucuyu kapatır.')
+        .addStringOption(o => 
+            o.setName('sebep')
+            .setDescription('Kapatma sebebini yazın (Zorunludur)')
+            .setRequired(true) // İsteğin üzerine zorunlu yaptık
+        )
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -70,7 +78,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log("✅ Sistem Güncellendi: Yasaklama mesajları yenilendi!");
+        console.log("✅ Shutdown sistemi sebep zorunluluğu ile güncellendi!");
     } catch (e) { console.error(e); }
 });
 
@@ -91,20 +99,24 @@ client.on('interactionCreate', async interaction => {
 
     const { commandName, options } = interaction;
 
-    if (commandName === 'yasakla') {
+    // --- SEBEPLİ SHUTDOWN ---
+    if (commandName === 'shutdown') {
+        const sebep = options.getString('sebep');
+        havuz.shutdownTetikle = true;
+        havuz.duyuru = "SHUTDOWN";
+        havuz.mesaj = sebep; // Yazdığın sebep Roblox'taki ekrana gider
+        await interaction.editReply(`🚨 **SİSTEM DUYURUSU:** "${sebep}" sebebiyle 10 saniyelik geri sayım başlatıldı!`);
+    }
+
+    else if (commandName === 'yasakla') {
         const hedef = options.getString('oyuncu');
-        
-        // Roblox listesi güncelleme
         if (!havuz.yasakliListesi.includes(hedef)) {
             havuz.yasakliListesi.push(hedef);
             havuz.kickHedef = hedef; 
         }
-
-        // Discord ban işlemi
         try {
             const member = interaction.guild.members.cache.find(m => m.user.username === hedef || m.user.id === hedef);
             if (member) {
-                // Sebep kısmından Başbuğ ibaresini sildik
                 await member.ban({ reason: 'Sunucudan yasaklandı.' });
                 await interaction.editReply(`🚫 **${hedef}** sunucudan yasaklandı.`);
             } else {
@@ -112,15 +124,8 @@ client.on('interactionCreate', async interaction => {
                 await interaction.editReply(`🚫 **${hedef}** sunucudan yasaklandı.`);
             }
         } catch (err) {
-            await interaction.editReply(`🚫 **${hedef}** Roblox için yasaklandı ancak Discord yetkisi yetmedi.`);
+            await interaction.editReply(`🚫 **${hedef}** Roblox için yasaklandı ancak Discord banı başarısız.`);
         }
-    }
-
-    else if (commandName === 'shutdown') {
-        havuz.shutdownTetikle = true;
-        havuz.duyuru = "SHUTDOWN";
-        havuz.mesaj = "Geliştiriciler tarafından 'Shutdown' atıldı";
-        await interaction.editReply("🚨 **SİSTEM DUYURUSU:** Geri sayım başlatıldı!");
     }
     
     else if (commandName === 'yasak-kaldir') {
@@ -129,18 +134,15 @@ client.on('interactionCreate', async interaction => {
         if (index > -1) havuz.yasakliListesi.splice(index, 1);
         await interaction.editReply(`✅ **${hedef}** yasağı kaldırıldı.`);
     }
+    // ... durum, duyuru vb.
 });
 
-// --- SADECE SELAMLAŞMA ---
+// --- SELAMLAŞMA ---
 client.on('messageCreate', (message) => {
     if (message.author.bot) return;
     const msg = message.content.toLowerCase().trim();
-
-    if (msg === 'merhaba') {
-        message.reply('Merhaba, hoş geldin! 🫡');
-    } else if (msg === 'sa' || msg === 'selam' || msg === 'selamün aleyküm') {
-        message.reply('Aleykümselam agam, hoş geldin!');
-    }
+    if (msg === 'merhaba') message.reply('Merhaba, hoş geldin! 🫡');
+    else if (msg === 'sa' || msg === 'selam') message.reply('Aleykümselam agam, hoş geldin!');
 });
 
 app.listen(port, () => {
