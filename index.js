@@ -4,7 +4,7 @@ const https = require('https');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// BURAYI KENDİ RENDER LİNKİNLE DEĞİŞTİR (Sonunda / olsun)
+// BURAYI KENDİ RENDER LİNKİNLE DEĞİŞTİR
 const MY_URL = "https://roblox-bot-servis.onrender.com/"; 
 
 let havuz = { duyuru: "", mesaj: "", ozelHedef: "", kickHedef: "", chatTemizle: false };
@@ -33,20 +33,20 @@ const client = new Client({
     ] 
 });
 
-// --- MESAJ DİNLEME (HARF DUYARLILIĞI YOK) ---
+// --- MESAJ DİNLEME ---
 client.on('messageCreate', (message) => {
     if (message.author.bot) return;
 
     const msg = message.content.toLowerCase().trim();
 
-    // --- STANNIS ÖZEL CEVABI (YÜCE BAŞBUĞ) ---
+    // Stannis Raconu
     if (msg === 'stannis') {
         return message.reply('Yüce Başbuğ Stannis! Mekanın tek sahibi, sözü üstüne söz söylenmez. 🫡🦅');
     }
 
-    // --- DİĞER CEVAPLAR ---
+    // Merhaba Güncellemesi
     if (msg === 'merhaba') {
-        message.reply('Merhaba agam, hoş geldin! Sunucu emrinde. 🫡');
+        message.reply('Merhaba, hoş geldin! 🫡');
     } else if (msg === 'sa' || msg === 'selam' || msg === 'selamün aleyküm') {
         message.reply('Aleykümselam agam, hoş geldin!');
     } else if (msg === 'nasılsın') {
@@ -67,7 +67,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log("✅ Bot hazır! Stannis raconu eklendi.");
+        console.log("✅ Bot hazır! Merhaba cevabı güncellendi.");
     } catch (e) { console.error(e); }
 });
 
