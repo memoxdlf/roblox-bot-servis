@@ -13,7 +13,7 @@ let havuz = {
     ozelHedef: "", 
     kickHedef: "", 
     chatTemizle: false,
-    yasakliListesi: [],
+    yasakliListesi: [], 
     shutdownTetikle: false 
 };
 
@@ -21,7 +21,7 @@ let sunucuDurum = { aktif: false, sonGorulme: 0, oyuncular: [] };
 
 app.use(express.json());
 
-// --- ROBLOX KONTROL ---
+// --- ROBLOX KONTROL NOKTASI ---
 app.all('/kontrol', (req, res) => {
     if (req.method === 'POST') {
         sunucuDurum.aktif = true;
@@ -30,11 +30,8 @@ app.all('/kontrol', (req, res) => {
         return res.status(200).json({ status: "ok" });
     }
     
-    // Verileri paketle
-    const veri = { ...havuz };
-    
-    // Roblox bilgiyi çektiği anda geçici komutları temizle
-    res.status(200).json(veri);
+    const gonderilecekVeri = { ...havuz };
+    res.status(200).json(gonderilecekVeri);
     
     havuz.duyuru = ""; 
     havuz.ozelHedef = ""; 
@@ -42,8 +39,6 @@ app.all('/kontrol', (req, res) => {
     havuz.chatTemizle = false;
     havuz.shutdownTetikle = false; 
 });
-
-app.get('/', (req, res) => res.send("Başbuğ Nöbette! Sistem Düzenlendi."));
 
 const client = new Client({ 
     intents: [
@@ -57,19 +52,17 @@ const client = new Client({
 
 // --- KOMUTLAR ---
 const commands = [
-    new SlashCommandBuilder().setName('durum').setDescription('Sunucu durumunu gösterir.'),
+    new SlashCommandBuilder().setName('durum').setDescription('Sunucu raporu.'),
     new SlashCommandBuilder()
         .setName('yasakla')
-        .setDescription('Hem Roblox hem Discord ban atar.')
-        .addStringOption(o => o.setName('oyuncu').setDescription('Username seçin').setRequired(true).setAutocomplete(true)),
+        .setDescription('Discorddan banlar ve Roblox listesine ekler.')
+        .addStringOption(o => o.setName('oyuncu').setDescription('Kullanıcı adı veya ID').setRequired(true).setAutocomplete(true)),
     new SlashCommandBuilder()
         .setName('yasak-kaldir')
         .setDescription('Yasağı kaldırır.')
         .addStringOption(o => o.setName('oyuncu').setDescription('İsim').setRequired(true)),
-    new SlashCommandBuilder().setName('duyuru').setDescription('Duyuru gönderir.').addStringOption(o => o.setName('mesaj').setDescription('İçerik').setRequired(true)),
-    new SlashCommandBuilder().setName('kick').setDescription('Oyundan atar.').addStringOption(o => o.setName('oyuncu').setDescription('Username').setRequired(true)),
-    new SlashCommandBuilder().setName('chat-temizle').setDescription('Sohbeti temizler.'),
-    new SlashCommandBuilder().setName('shutdown').setDescription('Orijinal 10 saniye geri sayımlı shutdown!') 
+    new SlashCommandBuilder().setName('duyuru').setDescription('Duyuru atar.').addStringOption(o => o.setName('mesaj').setDescription('İçerik').setRequired(true)),
+    new SlashCommandBuilder().setName('shutdown').setDescription('10 saniye geri sayımlı kapatma.')
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -77,13 +70,11 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log("✅ Sistem Başbuğ için yeniden kalibre edildi!");
+        console.log("✅ Sistem Güncellendi: Stannis raconu kaldırıldı!");
     } catch (e) { console.error(e); }
 });
 
-// --- ETKİLEŞİMLER ---
 client.on('interactionCreate', async interaction => {
-    
     if (interaction.isAutocomplete()) {
         const focusedValue = interaction.options.getFocused().toLowerCase();
         const members = await interaction.guild.members.fetch({ limit: 50 }).catch(() => null);
@@ -100,72 +91,51 @@ client.on('interactionCreate', async interaction => {
 
     const { commandName, options } = interaction;
 
-    // --- ORİJİNAL SHUTDOWN ---
-    if (commandName === 'shutdown') {
+    if (commandName === 'yasakla') {
+        const hedef = options.getString('oyuncu');
+        if (!havuz.yasakliListesi.includes(hedef)) {
+            havuz.yasakliListesi.push(hedef);
+            havuz.kickHedef = hedef; 
+        }
+        try {
+            const member = interaction.guild.members.cache.find(m => m.user.username === hedef || m.user.id === hedef);
+            if (member) {
+                await member.ban({ reason: 'Yasaklama emri uygulandı.' });
+                await interaction.editReply(`🚫 **${hedef}** hem Roblox hem de Discord'dan yasaklandı.`);
+            } else {
+                await interaction.guild.bans.create(hedef).catch(() => null);
+                await interaction.editReply(`🚫 **${hedef}** Roblox listesine eklendi.`);
+            }
+        } catch (err) {
+            await interaction.editReply(`🚫 **${hedef}** Roblox için yasaklandı ancak Discord banı başarısız (Yetki hatası).`);
+        }
+    }
+
+    else if (commandName === 'shutdown') {
         havuz.shutdownTetikle = true;
         havuz.duyuru = "SHUTDOWN";
         havuz.mesaj = "Geliştiriciler tarafından 'Shutdown' atıldı";
-        await interaction.editReply("🚨 **SİSTEM DUYURUSU:** 10 saniyelik geri sayımlı Shutdown başlatıldı! Kimse kaçamaz.");
+        await interaction.editReply("🚨 **SİSTEM DUYURUSU:** Geri sayım başlatıldı!");
     }
-
-    else if (commandName === 'yasakla') {
-        const hedefIsim = options.getString('oyuncu');
-        
-        // Roblox listesine ekle
-        if (!havuz.yasakliListesi.includes(hedefIsim)) {
-            havuz.yasakliListesi.push(hedefIsim);
-            havuz.kickHedef = hedefIsim; 
-        }
-
-        // Discord ban denemesi
-        try {
-            const member = interaction.guild.members.cache.find(m => m.user.username === hedefIsim);
-            if (member && member.bannable) {
-                await member.ban({ reason: 'Başbuğ emri.' });
-                await interaction.editReply(`🚫 **${hedefIsim}** paketlendi (Roblox + Discord).`);
-            } else {
-                await interaction.editReply(`🚫 **${hedefIsim}** Roblox'tan yasaklandı. (Discord için bot rolünü en üste taşıyın!)`);
-            }
-        } catch (err) {
-            await interaction.editReply(`🚫 **${hedefIsim}** sadece Roblox'tan yasaklandı.`);
-        }
-    } 
     
-    // Diğer komutlar (Durum, Duyuru, Kick, Temizle) aynen duruyor
     else if (commandName === 'yasak-kaldir') {
         const hedef = options.getString('oyuncu');
         const index = havuz.yasakliListesi.indexOf(hedef);
         if (index > -1) havuz.yasakliListesi.splice(index, 1);
-        await interaction.editReply(`✅ **${hedef}** yasağı kalktı.`);
-    }
-    else if (commandName === 'durum') {
-        const isOnline = (Date.now() - sunucuDurum.sonGorulme) / 1000 < 35;
-        const liste = sunucuDurum.oyuncular.length > 0 ? sunucuDurum.oyuncular.join(", ") : "Kimse yok.";
-        const embed = new EmbedBuilder().setTitle('📊 Durum').setColor(isOnline ? 0x00FF00 : 0xFF0000).addFields({ name: 'Oyundakiler', value: "```" + liste + "```" });
-        await interaction.editReply({ embeds: [embed] });
-    }
-    else if (commandName === 'duyuru') {
-        havuz.duyuru = "NORMAL_DUYURU";
-        havuz.mesaj = options.getString('mesaj');
-        await interaction.editReply("📢 Duyuru Roblox'a uçtu.");
-    }
-    else if (commandName === 'kick') {
-        havuz.kickHedef = options.getString('oyuncu');
-        await interaction.editReply(`👞 **${havuz.kickHedef}** atıldı.`);
-    }
-    else if (commandName === 'chat-temizle') {
-        havuz.chatTemizle = true;
-        await interaction.editReply("🧹 Temizlik yapıldı.");
+        await interaction.editReply(`✅ **${hedef}** yasağı kaldırıldı.`);
     }
 });
 
-// --- CHAT ETKİLEŞİMLERİ ---
+// --- SADECE SELAMLAŞMA KALDI ---
 client.on('messageCreate', (message) => {
     if (message.author.bot) return;
     const msg = message.content.toLowerCase().trim();
-    if (msg === 'stannis') message.reply('Yüce Başbuğ Stannis! Mekanın tek sahibi, sözü üstüne söz söylenmez. 🫡🦅');
-    if (msg === 'merhaba') message.reply('Merhaba, hoş geldin! 🫡');
-    else if (msg === 'sa' || msg === 'selam') message.reply('Aleykümselam agam, hoş geldin!');
+
+    if (msg === 'merhaba') {
+        message.reply('Merhaba, hoş geldin! 🫡');
+    } else if (msg === 'sa' || msg === 'selam' || msg === 'selamün aleyküm') {
+        message.reply('Aleykümselam agam, hoş geldin!');
+    }
 });
 
 app.listen(port, () => {
