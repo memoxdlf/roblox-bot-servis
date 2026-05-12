@@ -33,13 +33,18 @@ const client = new Client({
     ] 
 });
 
-// --- MESAJ DİNLEME (BÜYÜK/KÜÇÜK HARF FARK ETMEZ) ---
+// --- MESAJ DİNLEME (HARF DUYARLILIĞI YOK) ---
 client.on('messageCreate', (message) => {
     if (message.author.bot) return;
 
-    // Mesajı küçük harfe çevirir ve başındaki/sonundaki boşlukları siler
     const msg = message.content.toLowerCase().trim();
 
+    // --- STANNIS ÖZEL CEVABI (YÜCE BAŞBUĞ) ---
+    if (msg === 'stannis') {
+        return message.reply('Yüce Başbuğ Stannis! Mekanın tek sahibi, sözü üstüne söz söylenmez. 🫡🦅');
+    }
+
+    // --- DİĞER CEVAPLAR ---
     if (msg === 'merhaba') {
         message.reply('Merhaba agam, hoş geldin! Sunucu emrinde. 🫡');
     } else if (msg === 'sa' || msg === 'selam' || msg === 'selamün aleyküm') {
@@ -53,7 +58,7 @@ const commands = [
     new SlashCommandBuilder().setName('durum').setDescription('Sunucu durumunu gösterir.'),
     new SlashCommandBuilder().setName('duyuru').setDescription('Duyuru atar.').addStringOption(o => o.setName('mesaj').setDescription('İçerik').setRequired(true)),
     new SlashCommandBuilder().setName('mesaj').setDescription('Özel mesaj.').addStringOption(o => o.setName('oyuncu').setDescription('Username').setRequired(true)).addStringOption(o => o.setName('icerik').setDescription('Mesaj').setRequired(true)),
-    new SlashCommandBuilder().setName('kick').setName('kick').setDescription('Atar.').addStringOption(o => o.setName('oyuncu').setDescription('Username').setRequired(true)),
+    new SlashCommandBuilder().setName('kick').setDescription('Atar.').addStringOption(o => o.setName('oyuncu').setDescription('Username').setRequired(true)),
     new SlashCommandBuilder().setName('chat-temizle').setDescription('Sohbeti temizler.')
 ].map(c => c.toJSON());
 
@@ -62,7 +67,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log("✅ Bot hazır! Harf duyarlılığı kapatıldı.");
+        console.log("✅ Bot hazır! Stannis raconu eklendi.");
     } catch (e) { console.error(e); }
 });
 
