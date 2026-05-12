@@ -33,12 +33,27 @@ const client = new Client({
     ] 
 });
 
+// --- MESAJ DİNLEME (BÜYÜK/KÜÇÜK HARF FARK ETMEZ) ---
+client.on('messageCreate', (message) => {
+    if (message.author.bot) return;
+
+    // Mesajı küçük harfe çevirir ve başındaki/sonundaki boşlukları siler
+    const msg = message.content.toLowerCase().trim();
+
+    if (msg === 'merhaba') {
+        message.reply('Merhaba agam, hoş geldin! Sunucu emrinde. 🫡');
+    } else if (msg === 'sa' || msg === 'selam' || msg === 'selamün aleyküm') {
+        message.reply('Aleykümselam agam, hoş geldin!');
+    } else if (msg === 'nasılsın') {
+        message.reply('İyiyim agam, Roblox sunucunu bekliyorum. Sen nasılsın?');
+    }
+});
+
 const commands = [
     new SlashCommandBuilder().setName('durum').setDescription('Sunucu durumunu gösterir.'),
     new SlashCommandBuilder().setName('duyuru').setDescription('Duyuru atar.').addStringOption(o => o.setName('mesaj').setDescription('İçerik').setRequired(true)),
     new SlashCommandBuilder().setName('mesaj').setDescription('Özel mesaj.').addStringOption(o => o.setName('oyuncu').setDescription('Username').setRequired(true)).addStringOption(o => o.setName('icerik').setDescription('Mesaj').setRequired(true)),
-    new SlashCommandBuilder().setName('shutdown').setDescription('Sunucuyu günceller.').addStringOption(o => o.setName('sebep').setDescription('Neden?').setRequired(true)),
-    new SlashCommandBuilder().setName('kick').setDescription('Atar.').addStringOption(o => o.setName('oyuncu').setDescription('Username').setRequired(true)),
+    new SlashCommandBuilder().setName('kick').setName('kick').setDescription('Atar.').addStringOption(o => o.setName('oyuncu').setDescription('Username').setRequired(true)),
     new SlashCommandBuilder().setName('chat-temizle').setDescription('Sohbeti temizler.')
 ].map(c => c.toJSON());
 
@@ -47,20 +62,8 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log("✅ Bot Full Fonksiyon Hazır!");
+        console.log("✅ Bot hazır! Harf duyarlılığı kapatıldı.");
     } catch (e) { console.error(e); }
-});
-
-// MERHABA - SA CEVAPLARI
-client.on('messageCreate', (message) => {
-    if (message.author.bot) return;
-
-    const msg = message.content.toLowerCase();
-    if (msg === 'merhaba') {
-        message.reply('Merhaba agam, hoş geldin! Sunucu emrinde. 🫡');
-    } else if (msg === 'sa' || msg === 'selam') {
-        message.reply('Aleykümselam agam, hoş geldin!');
-    }
 });
 
 client.on('interactionCreate', async interaction => {
@@ -70,7 +73,7 @@ client.on('interactionCreate', async interaction => {
     const { commandName, options } = interaction;
 
     if (commandName === 'durum') {
-        const isOnline = (Date.now() - sunucuDurum.sonGorulme) / 1000 < 30;
+        const isOnline = (Date.now() - sunucuDurum.sonGorulme) / 1000 < 35;
         const liste = sunucuDurum.oyuncular.length > 0 ? sunucuDurum.oyuncular.join(", ") : "Kimse yok.";
         const embed = new EmbedBuilder()
             .setTitle('📊 Sunucu Raporu')
@@ -89,10 +92,6 @@ client.on('interactionCreate', async interaction => {
         havuz.ozelHedef = options.getString('oyuncu');
         havuz.mesaj = options.getString('icerik');
         await interaction.editReply(`✉️ ${havuz.ozelHedef} için mesaj iletildi.`);
-    } else if (commandName === 'shutdown') {
-        havuz.duyuru = "SUNUCUYU_KAPAT_ACIL";
-        havuz.mesaj = options.getString('sebep');
-        await interaction.editReply("🛑 Shutdown komutu iletildi.");
     } else if (commandName === 'kick') {
         havuz.kickHedef = options.getString('oyuncu');
         await interaction.editReply(`👞 ${havuz.kickHedef} atıldı.`);
@@ -102,9 +101,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// 3 DAKİKADA BİR UYANDIRMA
 app.listen(port, () => {
-    console.log(`Sunucu ${port} portunda uyanık.`);
     setInterval(() => {
         https.get(MY_URL, (res) => {
             console.log("Self-Ping Başarılı.");
