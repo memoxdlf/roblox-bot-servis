@@ -4,7 +4,7 @@ const https = require('https');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- AYARLAR ---
+// --- KRİTİK AYAR: Buraya Render URL'ni doğru yazdığından emin ol ---
 const MY_URL = "https://roblox-bot-servis.onrender.com/"; 
 
 let havuz = { 
@@ -21,7 +21,7 @@ let sunucuDurum = { aktif: false, sonGorulme: 0, oyuncular: [] };
 
 app.use(express.json());
 
-// --- ROBLOX KONTROL ---
+// --- ROBLOX BURADAN VERİ ÇEKER ---
 app.all('/kontrol', (req, res) => {
     if (req.method === 'POST') {
         sunucuDurum.aktif = true;
@@ -30,16 +30,19 @@ app.all('/kontrol', (req, res) => {
         return res.status(200).json({ status: "ok" });
     }
     
-    const gonderilecekVeri = { ...havuz };
-    res.status(200).json(gonderilecekVeri);
+    // Roblox'a veriyi gönder
+    res.status(200).json(havuz);
     
-    // Roblox veriyi çektiğinde geçici komutları temizle
+    // Veri gönderildikten sonra TEK SEFERLİK komutları hemen sıfırla
+    // Yasaklı listesi ASLA sıfırlanmaz.
     havuz.duyuru = ""; 
     havuz.ozelHedef = ""; 
     havuz.kickHedef = ""; 
     havuz.chatTemizle = false;
     havuz.shutdownTetikle = false; 
 });
+
+app.get('/', (req, res) => res.send("Sistem Aktif! Roblox Bağlantısı Bekleniyor..."));
 
 const client = new Client({ 
     intents: [
@@ -53,7 +56,7 @@ const client = new Client({
 
 // --- KOMUTLAR ---
 const commands = [
-    new SlashCommandBuilder().setName('durum').setDescription('Sunucu raporu.'),
+    new SlashCommandBuilder().setName('durum').setDescription('Sunucu durumunu kontrol eder.'),
     new SlashCommandBuilder()
         .setName('yasakla')
         .setDescription('Kişiyi Roblox ve Discorddan yasaklar.')
@@ -62,15 +65,11 @@ const commands = [
         .setName('yasak-kaldir')
         .setDescription('Yasağı kaldırır.')
         .addStringOption(o => o.setName('oyuncu').setDescription('İsim').setRequired(true)),
-    new SlashCommandBuilder().setName('duyuru').setDescription('Duyuru atar.').addStringOption(o => o.setName('mesaj').setDescription('İçerik').setRequired(true)),
+    new SlashCommandBuilder().setName('duyuru').setDescription('Duyuru atar.').addStringOption(o => o.setName('mesaj').setDescription('Mesaj içeriği').setRequired(true)),
     new SlashCommandBuilder()
         .setName('shutdown')
-        .setDescription('10 saniye geri sayım ile sunucuyu kapatır.')
-        .addStringOption(o => 
-            o.setName('sebep')
-            .setDescription('Kapatma sebebini yazın (Zorunludur)')
-            .setRequired(true) // İsteğin üzerine zorunlu yaptık
-        )
+        .setDescription('10 saniye geri sayımlı kapatma.')
+        .addStringOption(o => o.setName('sebep').setDescription('Kapatma sebebi').setRequired(true))
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -78,7 +77,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log("✅ Shutdown sistemi sebep zorunluluğu ile güncellendi!");
+        console.log("✅ Discord Botu Hazır!");
     } catch (e) { console.error(e); }
 });
 
@@ -95,58 +94,51 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (!interaction.isChatInputCommand()) return;
+    
+    // "Düşünüyor..." hatasını engellemek için anında yanıt veriyoruz
     try { await interaction.deferReply(); } catch (e) { return; }
 
     const { commandName, options } = interaction;
 
-    // --- SEBEPLİ SHUTDOWN ---
     if (commandName === 'shutdown') {
         const sebep = options.getString('sebep');
         havuz.shutdownTetikle = true;
         havuz.duyuru = "SHUTDOWN";
-        havuz.mesaj = sebep; // Yazdığın sebep Roblox'taki ekrana gider
-        await interaction.editReply(`🚨 **SİSTEM DUYURUSU:** "${sebep}" sebebiyle 10 saniyelik geri sayım başlatıldı!`);
+        havuz.mesaj = sebep;
+        await interaction.editReply(`🚨 **SİSTEM:** "${sebep}" sebebiyle shutdown başlatıldı!`);
     }
 
     else if (commandName === 'yasakla') {
         const hedef = options.getString('oyuncu');
-        if (!havuz.yasakliListesi.includes(hedef)) {
-            havuz.yasakliListesi.push(hedef);
-            havuz.kickHedef = hedef; 
-        }
+        havuz.yasakliListesi.push(hedef);
+        havuz.kickHedef = hedef; 
+        
         try {
             const member = interaction.guild.members.cache.find(m => m.user.username === hedef || m.user.id === hedef);
-            if (member) {
-                await member.ban({ reason: 'Sunucudan yasaklandı.' });
-                await interaction.editReply(`🚫 **${hedef}** sunucudan yasaklandı.`);
-            } else {
-                await interaction.guild.bans.create(hedef, { reason: 'Sunucudan yasaklandı.' }).catch(() => null);
-                await interaction.editReply(`🚫 **${hedef}** sunucudan yasaklandı.`);
-            }
+            if (member) await member.ban({ reason: 'Sunucudan yasaklandı.' });
+            await interaction.editReply(`🚫 **${hedef}** sunucudan yasaklandı.`);
         } catch (err) {
             await interaction.editReply(`🚫 **${hedef}** Roblox için yasaklandı ancak Discord banı başarısız.`);
         }
     }
     
+    else if (commandName === 'durum') {
+        const isOnline = (Date.now() - sunucuDurum.sonGorulme) / 1000 < 45;
+        await interaction.editReply(isOnline ? "🟢 Roblox Sunucusu Bağlı ve Dinliyor." : "🔴 Roblox Sunucusu Çevrimdışı (Bağlantı Yok).");
+    }
+    
     else if (commandName === 'yasak-kaldir') {
         const hedef = options.getString('oyuncu');
-        const index = havuz.yasakliListesi.indexOf(hedef);
-        if (index > -1) havuz.yasakliListesi.splice(index, 1);
+        havuz.yasakliListesi = havuz.yasakliListesi.filter(n => n !== hedef);
         await interaction.editReply(`✅ **${hedef}** yasağı kaldırıldı.`);
     }
-    // ... durum, duyuru vb.
 });
 
-// --- SELAMLAŞMA ---
-client.on('messageCreate', (message) => {
-    if (message.author.bot) return;
-    const msg = message.content.toLowerCase().trim();
-    if (msg === 'merhaba') message.reply('Merhaba, hoş geldin! 🫡');
-    else if (msg === 'sa' || msg === 'selam') message.reply('Aleykümselam agam, hoş geldin!');
-});
-
+// --- RENDER'I UYANIK TUTMA ---
 app.listen(port, () => {
-    setInterval(() => { https.get(MY_URL, (res) => {}).on('error', (e) => {}); }, 180000); 
+    setInterval(() => {
+        https.get(MY_URL, (res) => {}).on('error', (e) => {});
+    }, 60000); // 1 dakikada bir "ping" atar
 });
 
 client.login(process.env.TOKEN);
