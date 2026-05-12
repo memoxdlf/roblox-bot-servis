@@ -21,7 +21,7 @@ let sunucuDurum = { aktif: false, sonGorulme: 0, oyuncular: [] };
 
 app.use(express.json());
 
-// --- ROBLOX KONTROL NOKTASI ---
+// --- ROBLOX KONTROL ---
 app.all('/kontrol', (req, res) => {
     if (req.method === 'POST') {
         sunucuDurum.aktif = true;
@@ -55,7 +55,7 @@ const commands = [
     new SlashCommandBuilder().setName('durum').setDescription('Sunucu raporu.'),
     new SlashCommandBuilder()
         .setName('yasakla')
-        .setDescription('Discorddan banlar ve Roblox listesine ekler.')
+        .setDescription('Kişiyi Roblox ve Discorddan yasaklar.')
         .addStringOption(o => o.setName('oyuncu').setDescription('Kullanıcı adı veya ID').setRequired(true).setAutocomplete(true)),
     new SlashCommandBuilder()
         .setName('yasak-kaldir')
@@ -70,7 +70,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 client.once('ready', async () => {
     try {
         await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-        console.log("✅ Sistem Güncellendi: Stannis raconu kaldırıldı!");
+        console.log("✅ Sistem Güncellendi: Yasaklama mesajları yenilendi!");
     } catch (e) { console.error(e); }
 });
 
@@ -93,21 +93,26 @@ client.on('interactionCreate', async interaction => {
 
     if (commandName === 'yasakla') {
         const hedef = options.getString('oyuncu');
+        
+        // Roblox listesi güncelleme
         if (!havuz.yasakliListesi.includes(hedef)) {
             havuz.yasakliListesi.push(hedef);
             havuz.kickHedef = hedef; 
         }
+
+        // Discord ban işlemi
         try {
             const member = interaction.guild.members.cache.find(m => m.user.username === hedef || m.user.id === hedef);
             if (member) {
-                await member.ban({ reason: 'Yasaklama emri uygulandı.' });
-                await interaction.editReply(`🚫 **${hedef}** hem Roblox hem de Discord'dan yasaklandı.`);
+                // Sebep kısmından Başbuğ ibaresini sildik
+                await member.ban({ reason: 'Sunucudan yasaklandı.' });
+                await interaction.editReply(`🚫 **${hedef}** sunucudan yasaklandı.`);
             } else {
-                await interaction.guild.bans.create(hedef).catch(() => null);
-                await interaction.editReply(`🚫 **${hedef}** Roblox listesine eklendi.`);
+                await interaction.guild.bans.create(hedef, { reason: 'Sunucudan yasaklandı.' }).catch(() => null);
+                await interaction.editReply(`🚫 **${hedef}** sunucudan yasaklandı.`);
             }
         } catch (err) {
-            await interaction.editReply(`🚫 **${hedef}** Roblox için yasaklandı ancak Discord banı başarısız (Yetki hatası).`);
+            await interaction.editReply(`🚫 **${hedef}** Roblox için yasaklandı ancak Discord yetkisi yetmedi.`);
         }
     }
 
@@ -126,7 +131,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// --- SADECE SELAMLAŞMA KALDI ---
+// --- SADECE SELAMLAŞMA ---
 client.on('messageCreate', (message) => {
     if (message.author.bot) return;
     const msg = message.content.toLowerCase().trim();
